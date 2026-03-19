@@ -1,0 +1,178 @@
+services:
+  nginx:
+    image: nginx:1.24
+    ports:
+      - "${GATEWAY_PORT:-8000}:8000"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - user-service
+      - account-service
+      - transaction-service
+      - budget-service
+      - report-service
+      - quote-service
+    restart: unless-stopped
+
+  # ---- Rust services (dev: run inside container with prebuilt binary later)
+  # For now we run only user-service in docker to make "one command up" possible.
+  user-service:
+    image: rust:1.88
+    working_dir: /app
+    volumes:
+      - ./services:/app
+    command: ["cargo", "run", "-p", "user-service"]
+    environment:
+      - RUST_LOG=debug
+      - USER_SERVICE_PORT=8001
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      - DATABASE_URL=postgres://abook:${POSTGRES_PASSWORD:-abook_password}@postgres:5432/${POSTGRES_DB:-abook_auth}
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  account-service:
+    image: rust:1.88
+    working_dir: /app
+    volumes:
+      - ./services:/app
+    command: ["cargo", "run", "-p", "account-service"]
+    environment:
+      - RUST_LOG=debug
+      - ACCOUNT_SERVICE_PORT=8002
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      - MONGO_URL=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    restart: unless-stopped
+
+  transaction-service:
+    image: rust:1.88
+    working_dir: /app
+    volumes:
+      - ./services:/app
+    command: ["cargo", "run", "-p", "transaction-service"]
+    environment:
+      - RUST_LOG=debug
+      - TRANSACTION_SERVICE_PORT=8003
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      - MONGO_URL=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://abook:abook_password@rabbitmq:5672
+    depends_on:
+      - mongodb
+      - redis
+      - rabbitmq
+    restart: unless-stopped
+
+  budget-service:
+    image: rust:1.88
+    working_dir: /app
+    volumes:
+      - ./services:/app
+    command: ["cargo", "run", "-p", "budget-service"]
+    environment:
+      - RUST_LOG=debug
+      - BUDGET_SERVICE_PORT=8004
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      - MONGO_URL=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://abook:abook_password@rabbitmq:5672
+      - TIMESCALE_URL=postgres://abook:abook_password@timescaledb:5432/abook_timeseries
+    depends_on:
+      - mongodb
+      - redis
+      - rabbitmq
+      - timescaledb
+    restart: unless-stopped
+
+  report-service:
+    image: rust:1.88
+    working_dir: /app
+    volumes:
+      - ./services:/app
+    command: ["cargo", "run", "-p", "report-service"]
+    environment:
+      - RUST_LOG=debug
+      - REPORT_SERVICE_PORT=8005
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      - MONGO_URL=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    restart: unless-stopped
+
+  quote-service:
+    image: rust:1.88
+    working_dir: /app
+    volumes:
+      - ./services:/app
+    command: ["cargo", "run", "-p", "quote-service"]
+    environment:
+      - RUST_LOG=debug
+      - QUOTE_SERVICE_PORT=8006
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      - REDIS_URL=redis://redis:6379
+      - TIMESCALE_URL=postgres://abook:abook_password@timescaledb:5432/abook_timeseries
+    depends_on:
+      - redis
+      - timescaledb
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-abook_auth}
+      - POSTGRES_USER=${POSTGRES_USER:-abook}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-abook_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7.0
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  timescaledb:
+    image: timescale/timescaledb:2.13.1-pg16
+    environment:
+      - POSTGRES_DB=abook_timeseries
+      - POSTGRES_USER=${POSTGRES_USER:-abook}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-abook_password}
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    environment:
+      - RABBITMQ_DEFAULT_USER=${POSTGRES_USER:-abook}
+      - RABBITMQ_DEFAULT_PASS=${POSTGRES_PASSWORD:-abook_password}
+    ports:
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:
+  timescale_data:
+  rabbitmq_data:
+

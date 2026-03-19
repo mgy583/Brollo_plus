@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+  "common",
+  "user-service",
+  "account-service",
+  "transaction-service",
+  "budget-service",
+  "report-service",
+  "quote-service",
+]
+

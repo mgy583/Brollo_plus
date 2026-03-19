@@ -1,0 +1,273 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=ZCOOL+KuaiLe&display=swap');
+
+:root {
+  --sk-bg: #f7f7f5;
+  --sk-paper: #ffffff;
+  --sk-paper2: #fafafa;
+  --sk-ink: #1a1a1a;
+  --sk-ink2: #444444;
+  --sk-ink3: #888888;
+  --sk-border: #1a1a1a;
+  --sk-border-light: rgba(26,26,26,0.18);
+  --sk-shadow: 3px 3px 0 #1a1a1a;
+  --sk-shadow-sm: 2px 2px 0 rgba(26,26,26,0.25);
+  --sk-accent: #1a1a1a;
+  --sk-accent2: #555555;
+  --sk-red: #c0392b;
+  --sk-green: #27ae60;
+  --sk-blue: #2980b9;
+  --sk-yellow: #f39c12;
+  --sk-font: 'Caveat', 'ZCOOL KuaiLe', cursive;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--sk-bg);
+}
+
+body {
+  font-family: var(--sk-font) !important;
+  background-color: var(--sk-bg);
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 27px,
+      rgba(0,0,0,0.06) 27px,
+      rgba(0,0,0,0.06) 28px
+    );
+}
+
+*, *::before, *::after {
+  font-family: var(--sk-font) !important;
+}
+
+/* ===== Card ===== */
+.ant-card {
+  background: var(--sk-paper) !important;
+  border: 2px solid var(--sk-border) !important;
+  border-radius: 2px !important;
+  box-shadow: 4px 4px 0 var(--sk-border) !important;
+  position: relative;
+}
+.ant-card-head {
+  background: var(--sk-paper2) !important;
+  border-bottom: 2px solid var(--sk-border) !important;
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  color: var(--sk-ink) !important;
+}
+.ant-card-body { background: transparent !important; }
+
+/* ===== Button ===== */
+.ant-btn {
+  border: 2px solid var(--sk-border) !important;
+  border-radius: 2px !important;
+  box-shadow: 3px 3px 0 var(--sk-border) !important;
+  font-weight: 600 !important;
+  transition: transform 0.1s, box-shadow 0.1s !important;
+  background: var(--sk-paper) !important;
+  color: var(--sk-ink) !important;
+}
+.ant-btn:hover {
+  transform: translate(-1px, -1px) !important;
+  box-shadow: 4px 4px 0 var(--sk-border) !important;
+  background: var(--sk-paper2) !important;
+}
+.ant-btn:active {
+  transform: translate(2px, 2px) !important;
+  box-shadow: 1px 1px 0 var(--sk-border) !important;
+}
+.ant-btn-primary {
+  background: var(--sk-ink) !important;
+  color: #fff !important;
+  border-color: var(--sk-ink) !important;
+}
+.ant-btn-primary:hover {
+  background: #333 !important;
+  color: #fff !important;
+}
+.ant-btn-dangerous {
+  background: var(--sk-red) !important;
+  color: #fff !important;
+  border-color: #922b21 !important;
+  box-shadow: 3px 3px 0 #922b21 !important;
+}
+
+/* ===== Input ===== */
+.ant-input, .ant-input-affix-wrapper,
+.ant-select-selector, .ant-picker {
+  border: 2px solid var(--sk-border) !important;
+  border-radius: 2px !important;
+  background: var(--sk-paper) !important;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.12) !important;
+  color: var(--sk-ink) !important;
+}
+.ant-input:focus, .ant-input-affix-wrapper-focused {
+  box-shadow: 3px 3px 0 var(--sk-border) !important;
+  outline: none !important;
+}
+
+/* ===== Table ===== */
+.ant-table { background: transparent !important; }
+.ant-table-thead > tr > th {
+  background: #eeeeee !important;
+  border-bottom: 2px solid var(--sk-border) !important;
+  color: var(--sk-ink) !important;
+  font-weight: 700 !important;
+  font-size: 1rem !important;
+}
+.ant-table-tbody > tr > td {
+  border-bottom: 1.5px dashed rgba(0,0,0,0.12) !important;
+  background: transparent !important;
+  color: var(--sk-ink) !important;
+}
+.ant-table-tbody > tr:hover > td {
+  background: rgba(0,0,0,0.03) !important;
+}
+.ant-table-wrapper {
+  border: 2px solid var(--sk-border);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 var(--sk-border);
+  overflow: hidden;
+}
+
+/* ===== Sider ===== */
+.ant-layout-sider {
+  background: #1a1a1a !important;
+  border-right: 3px solid #000 !important;
+  box-shadow: 4px 0 0 #000 !important;
+}
+.ant-menu-dark { background: transparent !important; }
+.ant-menu-dark .ant-menu-item {
+  border-radius: 2px !important;
+  margin: 2px 8px !important;
+  font-size: 1rem !important;
+  color: #cccccc !important;
+}
+.ant-menu-dark .ant-menu-item-selected {
+  background: rgba(255,255,255,0.12) !important;
+  border: 1.5px solid rgba(255,255,255,0.25) !important;
+  color: #ffffff !important;
+}
+.ant-menu-dark .ant-menu-item:hover {
+  background: rgba(255,255,255,0.07) !important;
+  color: #ffffff !important;
+}
+
+/* ===== Header ===== */
+.ant-layout-header {
+  background: #eeeeee !important;
+  border-bottom: 2.5px solid var(--sk-border) !important;
+  box-shadow: 0 3px 0 var(--sk-border) !important;
+}
+
+/* ===== Statistic ===== */
+.ant-statistic-title {
+  font-size: 0.95rem !important;
+  color: var(--sk-ink3) !important;
+  font-weight: 600 !important;
+}
+.ant-statistic-content {
+  font-size: 1.65rem !important;
+  font-weight: 700 !important;
+  color: var(--sk-ink) !important;
+}
+
+/* ===== Modal ===== */
+.ant-modal-content {
+  border: 2.5px solid var(--sk-border) !important;
+  border-radius: 2px !important;
+  box-shadow: 6px 6px 0 var(--sk-border) !important;
+  background: var(--sk-paper) !important;
+}
+.ant-modal-header {
+  background: #eeeeee !important;
+  border-bottom: 2px solid var(--sk-border) !important;
+}
+.ant-modal-title { font-weight: 700 !important; font-size: 1.15rem !important; }
+
+/* ===== Form ===== */
+.ant-form-item-label > label {
+  font-weight: 600 !important;
+  color: var(--sk-ink) !important;
+}
+
+/* ===== Select / DatePicker dropdown ===== */
+.ant-select-dropdown {
+  border: 2px solid var(--sk-border) !important;
+  border-radius: 2px !important;
+  box-shadow: 4px 4px 0 var(--sk-border) !important;
+  background: var(--sk-paper) !important;
+}
+.ant-select-item-option-selected { background: #eeeeee !important; }
+.ant-picker-dropdown {
+  border: 2px solid var(--sk-border);
+  border-radius: 2px;
+  box-shadow: 4px 4px 0 var(--sk-border);
+}
+
+/* ===== Typography ===== */
+.ant-typography { color: var(--sk-ink) !important; }
+h1.ant-typography, h2.ant-typography,
+h3.ant-typography, h4.ant-typography {
+  font-weight: 700 !important;
+}
+
+/* ===== Tabs ===== */
+.ant-tabs-tab { font-size: 1.05rem !important; font-weight: 600 !important; }
+.ant-tabs-tab-active .ant-tabs-tab-btn { color: var(--sk-ink) !important; }
+.ant-tabs-ink-bar { background: var(--sk-ink) !important; height: 3px !important; }
+
+/* ===== Divider ===== */
+.ant-divider {
+  border-color: rgba(0,0,0,0.18) !important;
+  border-width: 1.5px !important;
+  border-style: dashed !important;
+}
+
+/* ===== Tag ===== */
+.ant-tag {
+  border: 1.5px solid var(--sk-border) !important;
+  border-radius: 2px !important;
+  font-weight: 600 !important;
+  background: var(--sk-paper2) !important;
+  color: var(--sk-ink) !important;
+}
+
+/* ===== Spin ===== */
+.ant-spin-dot-item { background: var(--sk-ink) !important; }
+
+/* ===== Progress bar (budget) ===== */
+.sketch-progress-wrap {
+  height: 10px;
+  border: 2px solid var(--sk-border);
+  border-radius: 0;
+  background: #eeeeee;
+  overflow: hidden;
+  box-shadow: 2px 2px 0 var(--sk-border);
+}
+.sketch-progress-bar {
+  height: 100%;
+  transition: width 0.4s;
+}
+
+/* ===== Sketch title underline ===== */
+.sketch-title {
+  display: inline-block;
+  position: relative;
+  font-family: var(--sk-font);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--sk-ink);
+}
+.sketch-title::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  width: 100%;
+  height: 2.5px;
+  background: var(--sk-ink);
+  transform: rotate(-0.4deg) scaleX(1.02);
+}

@@ -1,0 +1,19 @@
+# Rust
+/services/target
+**/*.rs.bk
+
+# Node
+/frontend/node_modules
+/frontend/dist
+
+# Env
+.env
+
+# IDE
+.vscode
+.idea
+
+# OS
+Thumbs.db
+Desktop.ini
+
