@@ -28,6 +28,7 @@ struct MeResponse {
     role: String,
     status: String,
     created_at: OffsetDateTime,
+    settings: serde_json::Value,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -41,6 +42,10 @@ struct MeRow {
     role: String,
     status: String,
     created_at: time::PrimitiveDateTime,
+    default_currency: Option<String>,
+    timezone: Option<String>,
+    language: Option<String>,
+    theme: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,7 +97,7 @@ async fn get_me(
 
     let rec: MeRow = sqlx::query_as(
         r#"
-        SELECT id, uuid, username, email, full_name, phone, role, status, created_at
+        SELECT id, uuid, username, email, full_name, phone, role, status, created_at, default_currency, timezone, language, theme
         FROM users
         WHERE uuid = $1
         "#,
@@ -112,6 +117,12 @@ async fn get_me(
         role: rec.role,
         status: rec.status,
         created_at: rec.created_at.assume_utc(),
+        settings: serde_json::json!({
+            "default_currency": rec.default_currency,
+            "timezone": rec.timezone,
+            "language": rec.language,
+            "theme": rec.theme,
+        }),
     };
 
     let body = ok(me, "操作成功", request_id);
@@ -146,7 +157,7 @@ async fn update_me(
             phone = COALESCE($3, phone),
             updated_at = NOW()
         WHERE uuid = $1
-        RETURNING id, uuid, username, email, full_name, phone, role, status, created_at
+        RETURNING id, uuid, username, email, full_name, phone, role, status, created_at, default_currency, timezone, language, theme
         "#,
     )
     .bind(user_uuid)
@@ -166,6 +177,12 @@ async fn update_me(
         role: rec.role,
         status: rec.status,
         created_at: rec.created_at.assume_utc(),
+        settings: serde_json::json!({
+            "default_currency": rec.default_currency,
+            "timezone": rec.timezone,
+            "language": rec.language,
+            "theme": rec.theme,
+        }),
     };
 
     let body = ok(me, "操作成功", request_id);
@@ -173,16 +190,44 @@ async fn update_me(
 }
 
 async fn update_settings(
+    State(state): State<AppState>,
     headers: HeaderMap,
-    Json(_req): Json<UpdateSettingsRequest>,
+    Json(req): Json<UpdateSettingsRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<common::ApiError>)> {
     let request_id = request_id_from_headers(&headers);
-    let body = ok(
-        serde_json::json!({}),
-        "暂未实现：用户 settings 设计在 MongoDB users 文档里",
-        request_id,
-    );
-    Ok(Json(serde_json::to_value(body).unwrap()))
+    let token = bearer_from_headers(&headers).ok_or_else(|| {
+        err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权", None, request_id.clone())
+    })?;
+    let claims = verify_access(&state.jwt_secret, &token)
+        .map_err(|_| err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权", None, request_id.clone()))?;
+    let user_uuid = Uuid::parse_str(&claims.sub)
+        .map_err(|_| err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权", None, request_id.clone()))?;
+    sqlx::query(
+        "UPDATE users SET default_currency=COALESCE($1,default_currency),timezone=COALESCE($2,timezone),language=COALESCE($3,language),theme=COALESCE($4,theme),updated_at=NOW() WHERE uuid=$5"
+    )
+    .bind(&req.default_currency)
+    .bind(&req.timezone)
+    .bind(&req.language)
+    .bind(&req.theme)
+    .bind(user_uuid)
+    .execute(&state.db).await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "保存失败", None, request_id.clone()))?;
+    let rec: MeRow = sqlx::query_as(
+        "SELECT id,uuid,username,email,full_name,phone,role,status,created_at,default_currency,timezone,language,theme FROM users WHERE uuid=$1"
+    ).bind(user_uuid).fetch_one(&state.db).await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "数据库错误", None, request_id.clone()))?;
+    let me = MeResponse {
+        id: rec.id, uuid: rec.uuid, username: rec.username, email: rec.email,
+        full_name: rec.full_name, phone: rec.phone, role: rec.role,
+        status: rec.status, created_at: rec.created_at.assume_utc(),
+        settings: serde_json::json!({
+            "default_currency": rec.default_currency,
+            "timezone": rec.timezone,
+            "language": rec.language,
+            "theme": rec.theme,
+        }),
+    };
+    Ok(Json(serde_json::to_value(ok(me, "设置已保存", request_id)).unwrap()))
 }
 
 fn verify_access(secret: &str, token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {

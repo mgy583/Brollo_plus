@@ -1,20 +1,12 @@
 import React, { useEffect, useState } from "react";
-import {
-  Button, Card, Col, Divider, Form, Input, Row, Select, Spin, Typography, message,
-} from "antd";
+import { Button, Card, Col, Divider, Form, Input, Row, Select, Spin, Typography, message } from "antd";
 import { authApi, type User } from "../api/auth";
 import { useAuthStore } from "../store/authStore";
 
 const CURRENCIES = ["CNY", "USD", "EUR", "JPY", "GBP", "HKD"];
 const TIMEZONES = ["Asia/Shanghai", "Asia/Tokyo", "America/New_York", "Europe/London", "UTC"];
-const LANGUAGES = [
-  { value: "zh-CN", label: "简体中文" },
-  { value: "en-US", label: "English" },
-];
-const THEMES = [
-  { value: "light", label: "浅色" },
-  { value: "dark", label: "深色" },
-];
+const LANGUAGES = [{ value: "zh-CN", label: "简体中文" }, { value: "en-US", label: "English" }];
+const THEMES = [{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }];
 
 export default function Settings() {
   const [user, setUser] = useState<User | null>(null);
@@ -22,13 +14,13 @@ export default function Settings() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
-  const setSession = useAuthStore(s => s.setSession);
-  const storeUser = useAuthStore(s => s.user);
-  const accessToken = useAuthStore(s => s.accessToken);
-  const refreshToken = useAuthStore(s => s.refreshToken);
   const [profileForm] = Form.useForm();
   const [settingsForm] = Form.useForm();
   const [pwdForm] = Form.useForm();
+  const storeUser = useAuthStore(s => s.user);
+  const accessToken = useAuthStore(s => s.accessToken);
+  const refreshToken = useAuthStore(s => s.refreshToken);
+  const setSession = useAuthStore(s => s.setSession);
 
   useEffect(() => {
     authApi.getMe()
@@ -63,7 +55,7 @@ export default function Settings() {
 
   const onChangePassword = async (values: { old_password: string; new_password: string; confirm_password: string }) => {
     if (values.new_password !== values.confirm_password) {
-      message.error("两次输入的新密码不一致");
+      message.error("两次输入的密码不一致");
       return;
     }
     setSavingPassword(true);
@@ -81,13 +73,13 @@ export default function Settings() {
       <Typography.Title level={3}>系统设置</Typography.Title>
       <Row gutter={24}>
         <Col xs={24} md={12}>
-          <Card title="基本资料" style={{ marginBottom: 24 }}>
+          <Card title="个人资料" style={{ marginBottom: 24 }}>
             <div style={{ marginBottom: 12 }}>
               <Typography.Text type="secondary">用户名：</Typography.Text>
               <Typography.Text strong>{user?.username}</Typography.Text>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <Typography.Text type="secondary">邮箱：</Typography.Text>
+              <Typography.Text type="secondary">邮符1：</Typography.Text>
               <Typography.Text>{user?.email}</Typography.Text>
             </div>
             <Form form={profileForm} layout="vertical" onFinish={onSaveProfile}>
@@ -97,7 +89,6 @@ export default function Settings() {
               <Button type="primary" htmlType="submit" loading={savingProfile}>保存资料</Button>
             </Form>
           </Card>
-
           <Card title="修改密码">
             <Form form={pwdForm} layout="vertical" onFinish={onChangePassword}>
               <Form.Item name="old_password" label="当前密码" rules={[{ required: true }]}>
@@ -113,11 +104,10 @@ export default function Settings() {
             </Form>
           </Card>
         </Col>
-
         <Col xs={24} md={12}>
           <Card title="偏好设置">
             <Form form={settingsForm} layout="vertical" onFinish={onSaveSettings}>
-              <Form.Item name="default_currency" label="默认币种">
+              <Form.Item name="default_currency" label="默认货币">
                 <Select options={CURRENCIES.map(c => ({ value: c, label: c }))} />
               </Form.Item>
               <Form.Item name="timezone" label="时区">
