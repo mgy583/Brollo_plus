@@ -6,6 +6,8 @@ pub struct Transaction {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
     pub user_id: String,
+    pub family_id: Option<String>,
+    pub recorder_id: Option<String>, // 实际记录人 user_id（家庭视图下有意义）
     #[serde(rename = "type")]
     pub tx_type: String,
     pub amount: f64,
@@ -28,6 +30,8 @@ pub struct Transaction {
 pub struct TransactionDto {
     pub id: String,
     pub user_id: String,
+    pub family_id: Option<String>,
+    pub recorder_id: Option<String>,
     #[serde(rename = "type")]
     pub tx_type: String,
     pub amount: f64,
@@ -48,6 +52,8 @@ impl From<Transaction> for TransactionDto {
         Self {
             id: t.id.map(|o| o.to_hex()).unwrap_or_default(),
             user_id: t.user_id,
+            family_id: t.family_id,
+            recorder_id: t.recorder_id,
             tx_type: t.tx_type,
             amount: t.amount,
             currency: t.currency,

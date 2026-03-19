@@ -17,6 +17,8 @@ pub struct DateRangeQuery {
     #[serde(rename = "type")]
     pub tx_type: Option<String>,
     pub interval: Option<String>,
+    pub family_id: Option<String>, // 家庭视图：聚合家庭所有成员数据
+    pub member_id: Option<String>, // 按成员筛选
 }
 
 pub async fn overview(
@@ -26,16 +28,7 @@ pub async fn overview(
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Document>("transactions");
 
-    let mut match_doc = doc! {
-        "user_id": &auth.user_id,
-        "status": { "$ne": "deleted" }
-    };
-    if q.start_date.is_some() || q.end_date.is_some() {
-        let mut date_filter = doc! {};
-        if let Some(s) = &q.start_date { date_filter.insert("$gte", s); }
-        if let Some(e) = &q.end_date { date_filter.insert("$lte", e); }
-        match_doc.insert("transaction_date", date_filter);
-    }
+    let mut match_doc = if let Some(fid) = &q.family_id { let mut d = doc! { "family_id": fid, "status": { "$ne": "deleted" } }; if let Some(mid) = &q.member_id { d.insert("user_id", mid); } d } else { doc! { "user_id": &auth.user_id, "status": { "$ne": "deleted" } } }; if q.start_date.is_some() || q.end_date.is_some() { let mut date_filter = doc! {}; if let Some(s) = &q.start_date { date_filter.insert("$gte", s); } if let Some(e) = &q.end_date { date_filter.insert("$lte", e); } match_doc.insert("transaction_date", date_filter); }
 
     let pipeline = vec![
         doc! { "$match": match_doc.clone() },
@@ -284,3 +277,4 @@ pub async fn accounts(
         "message": "ok"
     })))
 }
+

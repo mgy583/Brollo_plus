@@ -7,7 +7,8 @@ import {
   PieChartOutlined,
   BarChartOutlined,
   SettingOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  TeamOutlined,
 } from "@ant-design/icons";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
@@ -28,6 +29,7 @@ export function AppLayout() {
     { key: "/transactions", icon: <TransactionOutlined />, label: "交易记录" },
     { key: "/budgets", icon: <PieChartOutlined />, label: "预算管理" },
     { key: "/reports", icon: <BarChartOutlined />, label: "统计报表" },
+    { key: "/family", icon: <TeamOutlined />, label: "家庭管理" },
     { key: "/settings", icon: <SettingOutlined />, label: "系统设置" },
   ];
 
@@ -151,3 +153,4 @@ export function AppLayout() {
     </Layout>
   );
 }
+

@@ -11,6 +11,7 @@ const Transactions = lazy(() => import("./views/Transactions"));
 const Budgets = lazy(() => import("./views/Budgets"));
 const Reports = lazy(() => import("./views/Reports"));
 const Settings = lazy(() => import("./views/Settings"));
+const Family = lazy(() => import("./views/Family"));
 const Login = lazy(() => import("./views/auth/Login"));
 const Register = lazy(() => import("./views/auth/Register"));
 
@@ -33,17 +34,17 @@ export const router = createBrowserRouter([
       { path: "transactions", element: withSuspense(<Transactions />) },
       { path: "budgets", element: withSuspense(<Budgets />) },
       { path: "reports", element: withSuspense(<Reports />) },
-      { path: "settings", element: withSuspense(<Settings />) }
-    ]
+      { path: "family", element: withSuspense(<Family />) },
+      { path: "settings", element: withSuspense(<Settings />) },
+    ],
   },
   {
     path: "/auth",
     element: <AuthLayout />,
     children: [
       { path: "login", element: withSuspense(<Login />) },
-      { path: "register", element: withSuspense(<Register />) }
-    ]
+      { path: "register", element: withSuspense(<Register />) },
+    ],
   },
-  { path: "*", element: <Navigate to="/dashboard" replace /> }
+  { path: "*", element: <Navigate to="/dashboard" replace /> },
 ]);
-

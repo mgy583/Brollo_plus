@@ -6,6 +6,8 @@ pub struct Budget {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
     pub user_id: String,
+    pub family_id: Option<String>,
+    pub scope: Option<String>, // "personal" | "family"
     pub name: String,
     #[serde(rename = "type")]
     pub budget_type: String,
@@ -27,6 +29,8 @@ pub struct Budget {
 pub struct BudgetDto {
     pub id: String,
     pub user_id: String,
+    pub family_id: Option<String>,
+    pub scope: Option<String>,
     pub name: String,
     #[serde(rename = "type")]
     pub budget_type: String,
@@ -49,6 +53,8 @@ impl From<Budget> for BudgetDto {
         Self {
             id: b.id.map(|o| o.to_hex()).unwrap_or_default(),
             user_id: b.user_id,
+            family_id: b.family_id,
+            scope: b.scope,
             name: b.name,
             budget_type: b.budget_type,
             start_date: b.start_date,

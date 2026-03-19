@@ -6,6 +6,8 @@ pub struct Account {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
     pub user_id: String,
+    pub family_id: Option<String>,
+    pub visibility: Option<String>, // "private" | "family"
     pub name: String,
     #[serde(rename = "type")]
     pub account_type: String,
@@ -24,6 +26,8 @@ pub struct Account {
 pub struct AccountDto {
     pub id: String,
     pub user_id: String,
+    pub family_id: Option<String>,
+    pub visibility: Option<String>,
     pub name: String,
     #[serde(rename = "type")]
     pub account_type: String,
@@ -43,6 +47,8 @@ impl From<Account> for AccountDto {
         Self {
             id: a.id.map(|o| o.to_hex()).unwrap_or_default(),
             user_id: a.user_id,
+            family_id: a.family_id,
+            visibility: a.visibility,
             name: a.name,
             account_type: a.account_type,
             currency: a.currency,
@@ -63,6 +69,7 @@ pub struct Category {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
     pub user_id: Option<String>,
+    pub family_id: Option<String>,
     pub name: String,
     #[serde(rename = "type")]
     pub category_type: String,
@@ -80,6 +87,7 @@ pub struct Category {
 pub struct CategoryDto {
     pub id: String,
     pub user_id: Option<String>,
+    pub family_id: Option<String>,
     pub name: String,
     #[serde(rename = "type")]
     pub category_type: String,
@@ -97,6 +105,7 @@ impl CategoryDto {
         Self {
             id: c.id.map(|o| o.to_hex()).unwrap_or_default(),
             user_id: c.user_id,
+            family_id: c.family_id,
             name: c.name,
             category_type: c.category_type,
             icon: c.icon,
