@@ -1,4 +1,4 @@
-use crate::{auth::AuthUser, models::{Transaction, TransactionDto}, AppState};
+use crate::{auth::AuthUser, family_helper, models::{Transaction, TransactionDto}, AppState};
 use axum::{
     extract::{Extension, Path, Query, State},
     http::StatusCode,
@@ -38,6 +38,7 @@ pub struct CreatePayload {
     pub payee: Option<String>,
     pub transaction_date: String,
     pub notes: Option<String>,
+    pub family_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -51,30 +52,13 @@ pub struct UpdatePayload {
     pub notes: Option<String>,
 }
 
-pub async fn list_transactions(
-    State(state): State<AppState>,
-    Extension(auth): Extension<AuthUser>,
-    Query(q): Query<ListQuery>,
-) -> Result<Json<Value>, StatusCode> {
-    let col = state.mongo.collection::<Transaction>("transactions");
-    let page = q.page.unwrap_or(1).max(1);
-    let page_size = q.page_size.unwrap_or(20).min(500);
+async fn paginate(
+    col: &mongodb::Collection<Transaction>,
+    filter: bson::Document,
+    page: i64,
+    page_size: i64,
+) -> Result<Value, StatusCode> {
     let skip = (page - 1) * page_size;
-
-    let mut filter = doc! { "user_id": &auth.user_id, "status": { "$ne": "deleted" } };
-    if let Some(t) = &q.tx_type { filter.insert("type", t); }
-    if let Some(c) = &q.category_id { filter.insert("category_id", c); }
-    if let Some(a) = &q.account_id { filter.insert("account_id", a); }
-
-    let mut date_filter = doc! {};
-    if let Some(s) = &q.start_date { date_filter.insert("$gte", s); }
-    if let Some(e) = &q.end_date { date_filter.insert("$lte", e); }
-    if !date_filter.is_empty() { filter.insert("transaction_date", date_filter); }
-
-    if let Some(kw) = &q.search {
-        filter.insert("description", doc! { "$regex": kw, "$options": "i" });
-    }
-
     let total = col.count_documents(filter.clone()).await.unwrap_or(0) as i64;
     let opts = FindOptions::builder()
         .sort(doc! { "transaction_date": -1 })
@@ -87,43 +71,87 @@ pub async fn list_transactions(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let dtos: Vec<TransactionDto> = txs.into_iter().map(TransactionDto::from).collect();
     let total_pages = ((total + page_size - 1) / page_size).max(1);
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "transactions": dtos,
-            "pagination": {
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": total_pages,
-                "has_next": page < total_pages,
-                "has_prev": page > 1
-            }
-        },
-        "message": "ok"
-    })))
+    Ok(json!({
+        "transactions": dtos,
+        "pagination": {
+            "total": total, "page": page, "page_size": page_size,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
+    }))
 }
 
+fn apply_list_filters(filter: &mut bson::Document, q: &ListQuery) {
+    if let Some(t) = &q.tx_type { filter.insert("type", t); }
+    if let Some(c) = &q.category_id { filter.insert("category_id", c); }
+    if let Some(a) = &q.account_id { filter.insert("account_id", a); }
+    let mut date_filter = doc! {};
+    if let Some(s) = &q.start_date { date_filter.insert("$gte", s); }
+    if let Some(e) = &q.end_date { date_filter.insert("$lte", e); }
+    if !date_filter.is_empty() { filter.insert("transaction_date", date_filter); }
+    if let Some(kw) = &q.search {
+        filter.insert("description", doc! { "$regex": kw, "$options": "i" });
+    }
+}
+
+// GET /api/v1/transactions
+pub async fn list_transactions(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthUser>,
+    Query(q): Query<ListQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    let col = state.mongo.collection::<Transaction>("transactions");
+    let page = q.page.unwrap_or(1).max(1);
+    let page_size = q.page_size.unwrap_or(20).min(500);
+    let mut filter = doc! { "user_id": &auth.user_id, "status": { "$ne": "deleted" } };
+    apply_list_filters(&mut filter, &q);
+    let data = paginate(&col, filter, page, page_size).await?;
+    Ok(Json(json!({ "success": true, "data": data, "message": "ok" })))
+}
+
+// GET /api/v1/transactions/family/:family_id
+pub async fn list_family_transactions(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthUser>,
+    Path(family_id): Path<String>,
+    Query(q): Query<ListQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, &family_id).await {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let col = state.mongo.collection::<Transaction>("transactions");
+    let page = q.page.unwrap_or(1).max(1);
+    let page_size = q.page_size.unwrap_or(20).min(500);
+    let mut filter = doc! { "family_id": &family_id, "status": { "$ne": "deleted" } };
+    apply_list_filters(&mut filter, &q);
+    let data = paginate(&col, filter, page, page_size).await?;
+    Ok(Json(json!({ "success": true, "data": data, "message": "ok" })))
+}
+
+// POST /api/v1/transactions
 pub async fn create_transaction(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthUser>,
     Json(payload): Json<CreatePayload>,
 ) -> Result<Json<Value>, StatusCode> {
+    if let Some(fid) = &payload.family_id {
+        if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, fid).await {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
     let col = state.mongo.collection::<Transaction>("transactions");
     let now = DateTime::now();
-
-    let hash_input = format!(
-        "{}{}{}{}",
-        auth.user_id,
-        payload.amount,
-        payload.transaction_date,
-        payload.description.as_deref().unwrap_or("")
-    );
+    let hash_input = format!("{}{}{}{}",
+        auth.user_id, payload.amount, payload.transaction_date,
+        payload.description.as_deref().unwrap_or(""));
     let dedup_hash = format!("{:x}", md5::compute(hash_input.as_bytes()));
-
+    let recorder_id = payload.family_id.as_ref().map(|_| auth.user_id.clone());
     let tx = Transaction {
         id: None,
         user_id: auth.user_id.clone(),
+        family_id: payload.family_id.clone(),
+        recorder_id,
         tx_type: payload.tx_type.clone(),
         amount: payload.amount,
         currency: payload.currency.clone(),
@@ -140,14 +168,9 @@ pub async fn create_transaction(
         created_at: now,
         updated_at: now,
     };
+    let result = col.insert_one(&tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let id = result.inserted_id.as_object_id().map(|o| o.to_hex()).unwrap_or_default();
 
-    let result = col.insert_one(&tx).await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let id = result.inserted_id.as_object_id()
-        .map(|o| o.to_hex())
-        .unwrap_or_default();
-
-    // Update account balance
     let accounts = state.mongo.collection::<bson::Document>("accounts");
     let delta = match payload.tx_type.as_str() {
         "expense" => -payload.amount,
@@ -156,44 +179,39 @@ pub async fn create_transaction(
     };
     if delta != 0.0 {
         if let Ok(oid) = ObjectId::from_str(&payload.account_id) {
+            let acct_filter = if payload.family_id.is_some() {
+                doc! { "_id": oid }
+            } else {
+                doc! { "_id": oid, "user_id": &auth.user_id }
+            };
             let _ = accounts.update_one(
-                doc! { "_id": oid, "user_id": &auth.user_id },
+                acct_filter,
                 doc! { "$inc": { "current_balance": delta }, "$set": { "updated_at": now } },
             ).await;
         }
     }
-    // For transfer: credit the target account
     if payload.tx_type == "transfer" {
         if let Some(to_id) = &payload.to_account_id {
             if let Ok(oid) = ObjectId::from_str(to_id) {
                 let _ = accounts.update_one(
-                    doc! { "_id": oid, "user_id": &auth.user_id },
+                    doc! { "_id": oid },
                     doc! { "$inc": { "current_balance": payload.amount }, "$set": { "updated_at": now } },
                 ).await;
             }
         }
     }
-
-    // Publish RabbitMQ event (best-effort)
-    let event_payload = serde_json::json!({
-        "id": &id,
-        "user_id": &auth.user_id,
-        "type": &payload.tx_type,
-        "amount": payload.amount,
-        "currency": &payload.currency,
-        "category_id": &payload.category_id,
-        "account_id": &payload.account_id,
+    let event = serde_json::json!({
+        "id": &id, "user_id": &auth.user_id, "family_id": &payload.family_id,
+        "recorder_id": &auth.user_id, "type": &payload.tx_type,
+        "amount": payload.amount, "currency": &payload.currency,
+        "category_id": &payload.category_id, "account_id": &payload.account_id,
         "transaction_date": &payload.transaction_date
     });
-    let _ = publish_event(&state.rabbitmq_url, "transaction.created", event_payload.to_string()).await;
-
-    Ok(Json(json!({
-        "success": true,
-        "data": { "id": id },
-        "message": "交易创建成功"
-    })))
+    let _ = publish_event(&state.rabbitmq_url, "transaction.created", event.to_string()).await;
+    Ok(Json(json!({ "success": true, "data": { "id": id }, "message": "交易创建成功" })))
 }
 
+// GET /api/v1/transactions/:id
 pub async fn get_transaction(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthUser>,
@@ -201,12 +219,22 @@ pub async fn get_transaction(
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Transaction>("transactions");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let tx = col.find_one(doc! { "_id": oid, "user_id": &auth.user_id })
-        .await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    let tx = col.find_one(doc! { "_id": oid }).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
+    if tx.user_id != auth.user_id {
+        if let Some(fid) = &tx.family_id {
+            if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, fid).await {
+                return Err(StatusCode::FORBIDDEN);
+            }
+        } else {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
     Ok(Json(json!({ "success": true, "data": TransactionDto::from(tx), "message": "ok" })))
 }
 
+// PATCH /api/v1/transactions/:id
 pub async fn update_transaction(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthUser>,
@@ -215,6 +243,13 @@ pub async fn update_transaction(
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Transaction>("transactions");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let tx = col.find_one(doc! { "_id": oid }).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    // 只有原始记录人可修改
+    if tx.user_id != auth.user_id {
+        return Err(StatusCode::FORBIDDEN);
+    }
     let mut set_doc = doc! { "updated_at": DateTime::now() };
     if let Some(a) = payload.amount { set_doc.insert("amount", a); }
     if let Some(d) = payload.description { set_doc.insert("description", d); }
@@ -226,13 +261,12 @@ pub async fn update_transaction(
         let bson_tags: Vec<bson::Bson> = tags.into_iter().map(bson::Bson::String).collect();
         set_doc.insert("tags", bson_tags);
     }
-    col.update_one(
-        doc! { "_id": oid, "user_id": &auth.user_id },
-        doc! { "$set": set_doc },
-    ).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    col.update_one(doc! { "_id": oid }, doc! { "$set": set_doc }).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "success": true, "data": {}, "message": "更新成功" })))
 }
 
+// DELETE /api/v1/transactions/:id
 pub async fn delete_transaction(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthUser>,
@@ -240,8 +274,14 @@ pub async fn delete_transaction(
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Transaction>("transactions");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let tx = col.find_one(doc! { "_id": oid }).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if tx.user_id != auth.user_id {
+        return Err(StatusCode::FORBIDDEN);
+    }
     col.update_one(
-        doc! { "_id": oid, "user_id": &auth.user_id },
+        doc! { "_id": oid },
         doc! { "$set": { "status": "deleted", "updated_at": DateTime::now() } },
     ).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "success": true, "data": {}, "message": "已删除" })))
@@ -255,26 +295,8 @@ async fn publish_event(rabbitmq_url: &str, queue: &str, body: String) -> anyhow:
     };
     let conn = Connection::connect(rabbitmq_url, ConnectionProperties::default()).await?;
     let channel = conn.create_channel().await?;
-    channel
-        .queue_declare(
-            queue,
-            QueueDeclareOptions {
-                durable: true,
-                ..Default::default()
-            },
-            FieldTable::default(),
-        )
-        .await?;
-    channel
-        .basic_publish(
-            "",
-            queue,
-            BasicPublishOptions::default(),
-            body.as_bytes(),
-            BasicProperties::default().with_content_type("application/json".into()),
-        )
-        .await?;
+    channel.queue_declare(queue, QueueDeclareOptions { durable: true, ..Default::default() }, FieldTable::default()).await?;
+    channel.basic_publish("", queue, BasicPublishOptions::default(), body.as_bytes(),
+        BasicProperties::default().with_content_type("application/json".into())).await?;
     Ok(())
 }
-
-

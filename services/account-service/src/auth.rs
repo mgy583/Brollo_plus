@@ -17,6 +17,7 @@ pub struct Claims {
 #[derive(Clone)]
 pub struct AuthUser {
     pub user_id: String,
+    pub raw_token: String,
 }
 
 pub async fn require_auth(
@@ -24,14 +25,13 @@ pub async fn require_auth(
     mut req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let auth_header = req
+    let token = req
         .headers()
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .map(|s| s.to_string());
-
-    let token = auth_header.ok_or(StatusCode::UNAUTHORIZED)?;
+        .map(|s| s.to_string())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
 
     let token_data = decode::<Claims>(
         &token,
@@ -42,6 +42,7 @@ pub async fn require_auth(
 
     req.extensions_mut().insert(AuthUser {
         user_id: token_data.claims.sub,
+        raw_token: token,
     });
     Ok(next.run(req).await)
 }

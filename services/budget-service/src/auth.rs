@@ -17,6 +17,7 @@ pub struct Claims {
 #[derive(Clone)]
 pub struct AuthUser {
     pub user_id: String,
+    pub raw_token: String,
 }
 
 pub async fn require_auth(
@@ -41,6 +42,7 @@ pub async fn require_auth(
 
     req.extensions_mut().insert(AuthUser {
         user_id: token_data.claims.sub,
+        raw_token: token,
     });
     Ok(next.run(req).await)
 }

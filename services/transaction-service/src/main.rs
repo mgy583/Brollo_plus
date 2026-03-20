@@ -1,5 +1,6 @@
 mod auth;
 mod db;
+mod family_helper;
 mod handlers;
 mod models;
 
@@ -25,6 +26,7 @@ pub struct AppState {
     pub redis: ConnectionManager,
     pub jwt_secret: String,
     pub rabbitmq_url: String,
+    pub user_service_url: String,
 }
 
 #[tokio::main]
@@ -44,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
     let rabbitmq_url = std::env::var("RABBITMQ_URL")
         .unwrap_or_else(|_| "amqp://abook:abook_password@localhost:5672".into());
+    let user_service_url = std::env::var("USER_SERVICE_URL").unwrap_or_else(|_| "http://user-service:8001".into());
 
     let mongo_opts = ClientOptions::parse(&mongo_url).await?;
     let mongo_client = Client::with_options(mongo_opts)?;
@@ -58,12 +61,14 @@ async fn main() -> anyhow::Result<()> {
         redis: redis_cm,
         jwt_secret,
         rabbitmq_url,
+        user_service_url,
     };
 
     let auth_mw = middleware::from_fn_with_state(state.clone(), auth::require_auth);
 
     let api = Router::new()
         .route("/transactions", get(handlers::transactions::list_transactions).post(handlers::transactions::create_transaction))
+        .route("/transactions/family/:family_id", get(handlers::transactions::list_family_transactions))
         .route("/transactions/:id", get(handlers::transactions::get_transaction).patch(handlers::transactions::update_transaction).delete(handlers::transactions::delete_transaction))
         .layer(auth_mw)
         .with_state(state.clone());

@@ -5,11 +5,11 @@ use axum::{
     Json,
 };
 use bson::{doc, oid::ObjectId, DateTime};
+use futures::TryStreamExt;
 use mongodb::options::FindOptions;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::str::FromStr;
-use futures::TryStreamExt;
 
 #[derive(Deserialize)]
 pub struct ListCategoriesQuery {
@@ -41,7 +41,6 @@ pub async fn list_categories(
     Query(q): Query<ListCategoriesQuery>,
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Category>("categories");
-    // fetch system + user categories
     let mut filter = doc! {
         "$or": [
             { "user_id": bson::Bson::Null },
@@ -60,7 +59,6 @@ pub async fn list_categories(
     let all: Vec<Category> = cursor.try_collect().await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // build tree: top-level first, then attach children
     let mut top: Vec<CategoryDto> = vec![];
     let mut children_map: std::collections::HashMap<String, Vec<CategoryDto>> = std::collections::HashMap::new();
     for cat in all {
@@ -93,11 +91,11 @@ pub async fn create_category(
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Category>("categories");
     let now = DateTime::now();
-    // count for ordering
     let count = col.count_documents(doc! { "user_id": &auth.user_id }).await.unwrap_or(0);
     let cat = Category {
         id: None,
         user_id: Some(auth.user_id.clone()),
+        family_id: None,
         name: payload.name,
         category_type: payload.category_type,
         icon: payload.icon,
@@ -131,9 +129,7 @@ pub async fn update_category(
     col.update_one(
         doc! { "_id": oid, "user_id": &auth.user_id, "is_system": false },
         doc! { "$set": set_doc },
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    ).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "success": true, "data": {}, "message": "更新成功" })))
 }
 
@@ -145,7 +141,6 @@ pub async fn delete_category(
     let col = state.mongo.collection::<Category>("categories");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     col.delete_one(doc! { "_id": oid, "user_id": &auth.user_id, "is_system": false })
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "success": true, "data": {}, "message": "已删除" })))
 }

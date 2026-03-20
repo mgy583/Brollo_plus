@@ -21,3 +21,4 @@ uuid = { version = "1", features = ["v4", "serde"] }
 time = { version = "0.3", features = ["serde-human-readable"] }
 jsonwebtoken = "9"
 bson = { version = "2", features = ["uuid-1"] }
+reqwest = { version = "0.12", features = ["json"] }

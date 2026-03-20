@@ -105,8 +105,8 @@ export default function Transactions() {
   const typeLabel: Record<string, string> = { expense: "支出", income: "收入", transfer: "转账" };
 
   const columns: ColumnsType<Transaction> = [
-    { title: "日期", dataIndex: "transaction_date", width: 120 },
-    { title: "类型", dataIndex: "type", width: 80, render: v => <Tag color={typeColor[v]}>{typeLabel[v] ?? v}</Tag> },
+    { title: "日期", dataIndex: "transaction_date", width: 120, sorter: (a, b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime() },
+    { title: "类型", dataIndex: "type", width: 80, render: v => <Tag color={typeColor[v]}>{typeLabel[v] ?? v}</Tag>, sorter: (a, b) => a.type.localeCompare(b.type) },
     {
       title: "金额", dataIndex: "amount", width: 120,
       render: (v: number, r) => (
@@ -114,10 +114,11 @@ export default function Transactions() {
           {r.type === "expense" ? "-" : "+"}{v.toFixed(2)} {r.currency}
         </span>
       ),
+      sorter: (a, b) => a.amount - b.amount,
     },
-    { title: "账户", dataIndex: "account_id", render: v => accounts.find(a => a.id === v)?.name ?? v },
-    { title: "分类", dataIndex: "category_id", render: v => flatCats.find(c => c.id === v)?.name ?? v },
-    { title: "描述", dataIndex: "description", ellipsis: true },
+    { title: "账户", dataIndex: "account_id", render: v => accounts.find(a => a.id === v)?.name ?? v, sorter: (a, b) => (accounts.find(x => x.id === a.account_id)?.name ?? "").localeCompare(accounts.find(x => x.id === b.account_id)?.name ?? "") },
+    { title: "分类", dataIndex: "category_id", render: v => flatCats.find(c => c.id === v)?.name ?? v, sorter: (a, b) => (flatCats.find(x => x.id === a.category_id)?.name ?? "").localeCompare(flatCats.find(x => x.id === b.category_id)?.name ?? "") },
+    { title: "描述", dataIndex: "description", ellipsis: true, sorter: (a, b) => (a.description ?? "").localeCompare(b.description ?? "") },
     {
       title: "操作", width: 80,
       render: (_, r) => <Button size="small" danger icon={<DeleteOutlined />} onClick={() => onDelete(r.id)}>删除</Button>,

@@ -44,6 +44,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
       - MONGO_URL=mongodb://mongodb:27017
       - REDIS_URL=redis://redis:6379
+      - USER_SERVICE_URL=http://user-service:8001
     depends_on:
       - mongodb
       - redis
@@ -62,6 +63,7 @@ services:
       - MONGO_URL=mongodb://mongodb:27017
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://abook:abook_password@rabbitmq:5672
+      - USER_SERVICE_URL=http://user-service:8001
     depends_on:
       - mongodb
       - redis
@@ -82,6 +84,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://abook:abook_password@rabbitmq:5672
       - TIMESCALE_URL=postgres://abook:abook_password@timescaledb:5432/abook_timeseries
+      - USER_SERVICE_URL=http://user-service:8001
     depends_on:
       - mongodb
       - redis

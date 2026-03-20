@@ -1,11 +1,12 @@
 mod auth;
 mod db;
+mod family_helper;
 mod handlers;
 mod models;
 
 use axum::{
     middleware,
-    routing::{delete, get, patch, post},
+    routing::{get, post},
     Router,
 };
 use dotenvy::dotenv;
@@ -27,6 +28,7 @@ pub struct AppState {
     pub timescale: sqlx::PgPool,
     pub jwt_secret: String,
     pub rabbitmq_url: String,
+    pub user_service_url: String,
 }
 
 #[tokio::main]
@@ -48,6 +50,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "amqp://abook:abook_password@localhost:5672".into());
     let timescale_url = std::env::var("TIMESCALE_URL")
         .unwrap_or_else(|_| "postgres://abook:abook_password@localhost:5432/abook_timeseries".into());
+    let user_service_url = std::env::var("USER_SERVICE_URL").unwrap_or_else(|_| "http://user-service:8001".into());
 
     let mongo_opts = ClientOptions::parse(&mongo_url).await?;
     let mongo_client = Client::with_options(mongo_opts)?;
@@ -66,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         timescale,
         jwt_secret,
         rabbitmq_url: rabbitmq_url.clone(),
+        user_service_url,
     };
 
     let consumer_state = state.clone();
@@ -79,6 +83,7 @@ async fn main() -> anyhow::Result<()> {
 
     let api = Router::new()
         .route("/budgets", get(handlers::budgets::list_budgets).post(handlers::budgets::create_budget))
+        .route("/budgets/family/:family_id", get(handlers::budgets::list_family_budgets))
         .route("/budgets/:id", get(handlers::budgets::get_budget).patch(handlers::budgets::update_budget).delete(handlers::budgets::delete_budget))
         .layer(auth_mw)
         .with_state(state.clone());

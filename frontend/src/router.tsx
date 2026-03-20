@@ -20,6 +20,7 @@ const withSuspense = (el: React.ReactNode) => (
 );
 
 export const router = createBrowserRouter([
+  // future flags to suppress v7 warnings
   {
     path: "/",
     element: (
@@ -47,4 +48,8 @@ export const router = createBrowserRouter([
     ],
   },
   { path: "*", element: <Navigate to="/dashboard" replace /> },
-]);
+], {
+  future: {
+    v7_relativeSplatPath: true,
+  },
+});

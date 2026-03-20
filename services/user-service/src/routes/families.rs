@@ -6,6 +6,7 @@ use axum::{
     Router,
 };
 use common::{err, ok, request_id_from_headers};
+use jsonwebtoken::{DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -97,15 +98,26 @@ async fn get_cnt(db: &sqlx::PgPool, fid: i32) -> i64 {
     sqlx::query_scalar::<_,i64>("SELECT COUNT(*) FROM family_members WHERE family_id=$1")
         .bind(fid).fetch_one(db).await.unwrap_or(0)
 }
-fn sub_of(h: &HeaderMap) -> String {
-    h.get("x-user-sub").and_then(|v| v.to_str().ok()).unwrap_or("").to_string()
+fn sub_of(h: &HeaderMap, secret: &str) -> String {
+    let token = match h.get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| if v.starts_with("Bearer ") { Some(v[7..].trim().to_string()) } else { None })
+    {
+        Some(t) => t,
+        None => return String::new(),
+    };
+    #[derive(serde::Deserialize)]
+    struct C { sub: String }
+    jsonwebtoken::decode::<C>(&token, &DecodingKey::from_secret(secret.as_bytes()), &Validation::default())
+        .map(|d| d.claims.sub)
+        .unwrap_or_default()
 }
 type Res = Result<axum::Json<serde_json::Value>,(StatusCode,axum::Json<common::ApiError>)>;
 type ResC = Result<(StatusCode,axum::Json<serde_json::Value>),(StatusCode,axum::Json<common::ApiError>)>;
 
 async fn create_family(State(s): State<AppState>, h: HeaderMap, Json(req): Json<CreateFamilyReq>) -> ResC {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     if req.name.trim().is_empty() {
@@ -139,7 +151,7 @@ async fn create_family(State(s): State<AppState>, h: HeaderMap, Json(req): Json<
 
 async fn my_family(State(s): State<AppState>, h: HeaderMap) -> Res {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     let row = sqlx::query_as::<_, FamilyRow>(
@@ -157,7 +169,7 @@ async fn my_family(State(s): State<AppState>, h: HeaderMap) -> Res {
 
 async fn get_family(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i32>) -> Res {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     if get_role(&s.db, id, uid).await.is_none() {
@@ -172,7 +184,7 @@ async fn get_family(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i32>
 
 async fn update_family(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i32>, Json(req): Json<UpdateFamilyReq>) -> Res {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     let role = get_role(&s.db, id, uid).await
@@ -193,7 +205,7 @@ async fn update_family(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i
 
 async fn join_family(State(s): State<AppState>, h: HeaderMap, Json(req): Json<JoinFamilyReq>) -> ResC {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     let ex: Option<i32> = sqlx::query_scalar(
@@ -219,7 +231,7 @@ async fn join_family(State(s): State<AppState>, h: HeaderMap, Json(req): Json<Jo
 
 async fn list_members(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i32>) -> Res {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     if get_role(&s.db, id, uid).await.is_none() {
@@ -235,7 +247,7 @@ async fn list_members(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i3
 
 async fn update_member(State(s): State<AppState>, h: HeaderMap, Path((fid,tuid)): Path<(i32,i32)>, Json(req): Json<UpdateMemberReq>) -> Res {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     let role = get_role(&s.db, fid, uid).await
@@ -252,7 +264,7 @@ async fn update_member(State(s): State<AppState>, h: HeaderMap, Path((fid,tuid))
 
 async fn remove_member(State(s): State<AppState>, h: HeaderMap, Path((fid,tuid)): Path<(i32,i32)>) -> Res {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     let role = get_role(&s.db, fid, uid).await
@@ -271,7 +283,7 @@ async fn remove_member(State(s): State<AppState>, h: HeaderMap, Path((fid,tuid))
 
 async fn refresh_invite_code(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i32>) -> Res {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     let role = get_role(&s.db, id, uid).await
@@ -293,7 +305,7 @@ async fn refresh_invite_code(State(s): State<AppState>, h: HeaderMap, Path(id): 
 
 async fn leave_family(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i32>) -> Res {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     let role = get_role(&s.db, id, uid).await
@@ -309,7 +321,7 @@ async fn leave_family(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i3
 
 async fn dissolve_family(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i32>) -> Res {
     let rid = request_id_from_headers(&h);
-    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h)).await else {
+    let Some(uid) = uid_from_sub(&s.db, &sub_of(&h, &s.jwt_secret)).await else {
         return Err(err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未认证", None, rid));
     };
     let role = get_role(&s.db, id, uid).await

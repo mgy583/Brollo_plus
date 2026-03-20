@@ -23,3 +23,4 @@ time = { version = "0.3", features = ["serde-human-readable"] }
 jsonwebtoken = "9"
 bson = { version = "2", features = ["uuid-1"] }
 md5 = "0.7"
+reqwest = { version = "0.12", features = ["json"] }
