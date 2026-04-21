@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>图4-4 系统类图</title>
+  <style>
+    body{margin:0;padding:24px;background:#fff;font-family:"SimSun","Songti SC","Times New Roman",serif;color:#111}.page{max-width:1450px;margin:0 auto}h1{text-align:center;font-size:24px;margin:0 0 10px}.desc{font-size:14px;line-height:1.8;text-indent:2em}.figure-title,.figure-note{text-align:center;font-size:14px;line-height:1.8}.figure-title{font-weight:700;margin-top:10px}svg{width:100%;height:auto;border:1px solid #bbb;background:#fff}.band{fill:#fafafa;stroke:#ccc;stroke-width:1}.cls{fill:#fff;stroke:#333;stroke-width:1.4;rx:6;ry:6}.cls-main{fill:#eef4ff;stroke:#2f5fa7;stroke-width:1.6;rx:6;ry:6}.divider{stroke:#888;stroke-width:1}.line{stroke:#333;stroke-width:1.4;fill:none;marker-end:url(#arrow)}.dash{stroke:#555;stroke-width:1.3;stroke-dasharray:7 4;fill:none;marker-end:url(#arrow)}.title{font-size:20px;font-weight:700}.section{font-size:15px;font-weight:700}.name{font-size:14px;font-weight:700;text-anchor:middle}.txt{font-size:12px}.label{font-size:12px;text-anchor:middle}
+  </style>
+</head>
+<body>
+<div class="page">
+<h1>4.4 系统类图</h1>
+<p class="desc">类图用于描述系统中前端表示层、接口服务层以及核心领域对象之间的静态结构关系。考虑到本项目采用 React 前端、Axios API 封装与 Zustand 状态管理方式，类图重点刻画页面组件、接口访问类、状态仓库与核心业务对象之间的依赖和映射关系。</p>
+<svg viewBox="0 0 1500 980" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#333"/></marker></defs>
+<text x="750" y="42" class="title" text-anchor="middle">Brollo_plus 类图（简化 UML）</text>
+<rect x="40" y="80" width="1420" height="210" class="band"/><rect x="40" y="320" width="1420" height="240" class="band"/><rect x="40" y="600" width="1420" height="300" class="band"/>
+<text x="70" y="105" class="section">表示层</text><text x="70" y="345" class="section">服务层</text><text x="70" y="625" class="section">数据层</text>
+<rect x="80" y="130" width="220" height="125" class="cls-main"/><line x1="80" y1="162" x2="300" y2="162" class="divider"/><line x1="80" y1="210" x2="300" y2="210" class="divider"/><text x="190" y="151" class="name">AuthPage</text><text x="95" y="186" class="txt">+ login()</text><text x="95" y="204" class="txt">+ register()</text><text x="95" y="234" class="txt">依赖：AuthApi、AuthStore</text>
+<rect x="350" y="130" width="250" height="125" class="cls-main"/><line x1="350" y1="162" x2="600" y2="162" class="divider"/><line x1="350" y1="210" x2="600" y2="210" class="divider"/><text x="475" y="151" class="name">DashboardView</text><text x="365" y="186" class="txt">+ loadOverview()</text><text x="365" y="204" class="txt">+ renderCharts()</text><text x="365" y="234" class="txt">依赖：ReportsApi、AccountsApi、BudgetsApi</text>
+<rect x="650" y="130" width="260" height="125" class="cls-main"/><line x1="650" y1="162" x2="910" y2="162" class="divider"/><line x1="650" y1="210" x2="910" y2="210" class="divider"/><text x="780" y="151" class="name">TransactionsView</text><text x="665" y="186" class="txt">+ loadTransactions()</text><text x="665" y="204" class="txt">+ createTransaction()</text><text x="665" y="234" class="txt">依赖：TransactionsApi、AccountsApi、CategoriesApi</text>
+<rect x="960" y="130" width="200" height="125" class="cls-main"/><line x1="960" y1="162" x2="1160" y2="162" class="divider"/><line x1="960" y1="210" x2="1160" y2="210" class="divider"/><text x="1060" y="151" class="name">ProtectedRoute</text><text x="975" y="186" class="txt">+ checkAuth()</text><text x="975" y="204" class="txt">+ redirectLogin()</text><text x="975" y="234" class="txt">依赖：AuthStore</text>
+<rect x="70" y="385" width="210" height="140" class="cls"/><line x1="70" y1="417" x2="280" y2="417" class="divider"/><line x1="70" y1="475" x2="280" y2="475" class="divider"/><text x="175" y="406" class="name">ApiClient</text><text x="85" y="440" class="txt">+ request(config)</text><text x="85" y="460" class="txt">+ tryRefresh()</text><text x="85" y="498" class="txt">- axiosInstance</text><text x="85" y="518" class="txt">- interceptors</text>
+<rect x="330" y="385" width="170" height="140" class="cls"/><line x1="330" y1="417" x2="500" y2="417" class="divider"/><line x1="330" y1="475" x2="500" y2="475" class="divider"/><text x="415" y="406" class="name">AuthApi</text><text x="345" y="440" class="txt">+ login()</text><text x="345" y="460" class="txt">+ register()</text><text x="345" y="498" class="txt">+ refresh()</text><text x="345" y="518" class="txt">+ logout()</text>
+<rect x="550" y="385" width="180" height="140" class="cls"/><line x1="550" y1="417" x2="730" y2="417" class="divider"/><line x1="550" y1="475" x2="730" y2="475" class="divider"/><text x="640" y="406" class="name">AccountsApi</text><text x="565" y="440" class="txt">+ list()</text><text x="565" y="460" class="txt">+ create()</text><text x="565" y="498" class="txt">+ update()</text><text x="565" y="518" class="txt">+ delete()</text>
+<rect x="790" y="385" width="190" height="140" class="cls"/><line x1="790" y1="417" x2="980" y2="417" class="divider"/><line x1="790" y1="475" x2="980" y2="475" class="divider"/><text x="885" y="406" class="name">TransactionsApi</text><text x="805" y="440" class="txt">+ list()</text><text x="805" y="460" class="txt">+ create()</text><text x="805" y="498" class="txt">+ delete()</text><text x="805" y="518" class="txt">+ queryByFilter()</text>
+<rect x="1040" y="385" width="180" height="140" class="cls"/><line x1="1040" y1="417" x2="1220" y2="417" class="divider"/><line x1="1040" y1="475" x2="1220" y2="475" class="divider"/><text x="1130" y="406" class="name">BudgetsApi</text><text x="1055" y="440" class="txt">+ list()</text><text x="1055" y="460" class="txt">+ create()</text><text x="1055" y="498" class="txt">+ update()</text><text x="1055" y="518" class="txt">+ alertStatus()</text>
+<rect x="1270" y="385" width="170" height="140" class="cls"/><line x1="1270" y1="417" x2="1440" y2="417" class="divider"/><line x1="1270" y1="475" x2="1440" y2="475" class="divider"/><text x="1355" y="406" class="name">ReportsApi</text><text x="1285" y="440" class="txt">+ overview()</text><text x="1285" y="460" class="txt">+ categories()</text><text x="1285" y="498" class="txt">+ trend()</text><text x="1285" y="518" class="txt">+ export()</text>
+<rect x="80" y="690" width="220" height="160" class="cls"/><line x1="80" y1="722" x2="300" y2="722" class="divider"/><line x1="80" y1="780" x2="300" y2="780" class="divider"/><text x="190" y="711" class="name">AuthStore</text><text x="95" y="745" class="txt">+ accessToken</text><text x="95" y="765" class="txt">+ refreshToken</text><text x="95" y="802" class="txt">+ setSession()</text><text x="95" y="822" class="txt">+ clearSession()</text>
+<rect x="380" y="690" width="180" height="160" class="cls"/><line x1="380" y1="722" x2="560" y2="722" class="divider"/><line x1="380" y1="780" x2="560" y2="780" class="divider"/><text x="470" y="711" class="name">User</text><text x="395" y="745" class="txt">+ id</text><text x="395" y="765" class="txt">+ username</text><text x="395" y="802" class="txt">+ email</text><text x="395" y="822" class="txt">+ full_name</text>
+<rect x="620" y="690" width="190" height="160" class="cls"/><line x1="620" y1="722" x2="810" y2="722" class="divider"/><line x1="620" y1="780" x2="810" y2="780" class="divider"/><text x="715" y="711" class="name">Account</text><text x="635" y="745" class="txt">+ id</text><text x="635" y="765" class="txt">+ name</text><text x="635" y="802" class="txt">+ currency</text><text x="635" y="822" class="txt">+ current_balance</text>
+<rect x="880" y="690" width="210" height="160" class="cls"/><line x1="880" y1="722" x2="1090" y2="722" class="divider"/><line x1="880" y1="780" x2="1090" y2="780" class="divider"/><text x="985" y="711" class="name">Transaction</text><text x="895" y="745" class="txt">+ id</text><text x="895" y="765" class="txt">+ type</text><text x="895" y="802" class="txt">+ amount</text><text x="895" y="822" class="txt">+ account_id / category_id</text>
+<rect x="1160" y="690" width="210" height="160" class="cls"/><line x1="1160" y1="722" x2="1370" y2="722" class="divider"/><line x1="1160" y1="780" x2="1370" y2="780" class="divider"/><text x="1265" y="711" class="name">Budget</text><text x="1175" y="745" class="txt">+ id</text><text x="1175" y="765" class="txt">+ amount</text><text x="1175" y="802" class="txt">+ progress</text><text x="1175" y="822" class="txt">+ category_ids / account_ids</text>
+<path d="M300 192 L330 192" class="line"/><text x="315" y="178" class="label">依赖</text>
+<path d="M600 192 L790 192" class="line"/><text x="695" y="178" class="label">依赖</text>
+<path d="M910 192 L960 192" class="line"/><text x="935" y="178" class="label">鉴权</text>
+<path d="M190 255 L175 385" class="line"/><text x="146" y="330" class="label">调用</text>
+<path d="M475 255 L1355 385" class="line"/><text x="920" y="312" class="label">数据聚合调用</text>
+<path d="M780 255 L885 385" class="line"/><text x="855" y="330" class="label">调用</text>
+<path d="M1060 255 L190 690" class="dash"/><text x="615" y="520" class="label">读取认证状态</text>
+<path d="M175 525 L190 690" class="line"/><text x="150" y="615" class="label">维护</text>
+<path d="M415 525 L470 690" class="line"/><text x="432" y="616" class="label">映射</text>
+<path d="M640 525 L715 690" class="line"/><text x="658" y="616" class="label">映射</text>
+<path d="M885 525 L985 690" class="line"/><text x="915" y="616" class="label">映射</text>
+<path d="M1130 525 L1265 690" class="line"/><text x="1180" y="616" class="label">映射</text>
+<path d="M810 770 L880 770" class="dash"/><text x="845" y="756" class="label">关联</text>
+<path d="M1090 770 L1160 770" class="dash"/><text x="1125" y="756" class="label">汇总</text>
+</svg>
+<div class="figure-title">图4-4 系统类图</div>
+<div class="figure-note">注：该类图采用简化 UML 表达方式，重点展示前端组件、接口访问对象、状态仓库以及核心领域对象之间的静态关系。</div>
+</div>
+</body>
+</html>

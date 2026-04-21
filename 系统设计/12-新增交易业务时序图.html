@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>图4-5 新增交易业务时序图</title>
+  <style>
+    body{margin:0;padding:24px;background:#fff;font-family:"SimSun","Songti SC","Times New Roman",serif;color:#111}.page{max-width:1350px;margin:0 auto}h1{text-align:center;font-size:24px;margin:0 0 10px}.desc{font-size:14px;line-height:1.8;text-indent:2em}.figure-title,.figure-note{text-align:center;font-size:14px;line-height:1.8}.figure-title{font-weight:700;margin-top:10px}svg{width:100%;height:auto;border:1px solid #bbb;background:#fff}.head{fill:#fff;stroke:#333;stroke-width:1.4;rx:6;ry:6}.head-main{fill:#eef4ff;stroke:#2f5fa7;stroke-width:1.6;rx:6;ry:6}.life{stroke:#777;stroke-width:1.2;stroke-dasharray:6 4}.act{fill:#f1f5ff;stroke:#2f5fa7;stroke-width:1.2}.line{stroke:#333;stroke-width:1.4;fill:none;marker-end:url(#arrow)}.dash{stroke:#555;stroke-width:1.3;stroke-dasharray:7 4;fill:none;marker-end:url(#arrow)}.event{stroke:#333;stroke-width:1.4;stroke-dasharray:3 3;fill:none;marker-end:url(#arrow)}.title{font-size:20px;font-weight:700}.node{font-size:14px;font-weight:700;text-anchor:middle}.label{font-size:12px;text-anchor:middle}
+  </style>
+</head>
+<body>
+<div class="page">
+<h1>4.5 新增交易业务时序图</h1>
+<p class="desc">时序图用于描述系统在某一具体业务场景中的动态交互过程。这里选取“新增交易并联动预算更新”作为典型流程，展示用户、前端页面、API 客户端、网关、交易服务、预算服务以及数据库之间的调用顺序与信息传递机制。</p>
+<svg viewBox="0 0 1380 980" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#333"/></marker></defs>
+<text x="690" y="42" class="title" text-anchor="middle">新增交易并触发预算更新的时序图</text>
+<rect x="50" y="90" width="110" height="48" class="head"/><text x="105" y="119" class="node">用户</text>
+<rect x="220" y="90" width="130" height="48" class="head-main"/><text x="285" y="119" class="node">前端页面</text>
+<rect x="410" y="90" width="130" height="48" class="head-main"/><text x="475" y="119" class="node">API Client</text>
+<rect x="610" y="90" width="140" height="48" class="head-main"/><text x="680" y="119" class="node">Nginx 网关</text>
+<rect x="830" y="90" width="170" height="48" class="head"/><text x="915" y="119" class="node">Transaction Service</text>
+<rect x="1070" y="90" width="150" height="48" class="head"/><text x="1145" y="119" class="node">Budget Service</text>
+<rect x="1260" y="90" width="90" height="48" class="head"/><text x="1305" y="119" class="node">MongoDB</text>
+<line x1="105" y1="138" x2="105" y2="910" class="life"/><line x1="285" y1="138" x2="285" y2="910" class="life"/><line x1="475" y1="138" x2="475" y2="910" class="life"/><line x1="680" y1="138" x2="680" y2="910" class="life"/><line x1="915" y1="138" x2="915" y2="910" class="life"/><line x1="1145" y1="138" x2="1145" y2="910" class="life"/><line x1="1305" y1="138" x2="1305" y2="910" class="life"/>
+<rect x="279" y="180" width="12" height="670" class="act"/><rect x="469" y="220" width="12" height="570" class="act"/><rect x="674" y="260" width="12" height="490" class="act"/><rect x="909" y="300" width="12" height="390" class="act"/><rect x="1139" y="520" width="12" height="170" class="act"/><rect x="1299" y="350" width="12" height="280" class="act"/>
+<line x1="105" y1="180" x2="285" y2="180" class="line"/><text x="195" y="166" class="label">1. 提交新增交易表单</text>
+<line x1="285" y1="230" x2="475" y2="230" class="line"/><text x="380" y="216" class="label">2. createTransaction(payload)</text>
+<line x1="475" y1="280" x2="680" y2="280" class="line"/><text x="578" y="266" class="label">3. POST /api/v1/transactions</text>
+<line x1="680" y1="330" x2="915" y2="330" class="line"/><text x="797" y="316" class="label">4. 路由转发与鉴权</text>
+<line x1="915" y1="380" x2="1305" y2="380" class="line"/><text x="1110" y="366" class="label">5. 写入交易记录</text>
+<line x1="1305" y1="430" x2="915" y2="430" class="dash"/><text x="1110" y="448" class="label">6. 返回写入成功</text>
+<line x1="915" y1="480" x2="1145" y2="480" class="event"/><text x="1030" y="466" class="label">7. 发布 TransactionCreated 事件</text>
+<line x1="1145" y1="530" x2="1305" y2="530" class="line"/><text x="1225" y="516" class="label">8. 查询预算相关数据</text>
+<line x1="1305" y1="580" x2="1145" y2="580" class="dash"/><text x="1225" y="598" class="label">9. 返回预算执行数据</text>
+<line x1="1145" y1="640" x2="915" y2="640" class="event"/><text x="1030" y="626" class="label">10. 更新预算进度与预警状态</text>
+<line x1="915" y1="710" x2="680" y2="710" class="dash"/><text x="797" y="728" class="label">11. 返回成功响应</text>
+<line x1="680" y1="760" x2="475" y2="760" class="dash"/><text x="578" y="778" class="label">12. 返回统一响应结构</text>
+<line x1="475" y1="810" x2="285" y2="810" class="dash"/><text x="380" y="828" class="label">13. 刷新列表与统计信息</text>
+<line x1="285" y1="860" x2="105" y2="860" class="dash"/><text x="195" y="878" class="label">14. 展示成功提示与最新数据</text>
+</svg>
+<div class="figure-title">图4-5 新增交易业务时序图</div>
+<div class="figure-note">注：该图反映交易新增场景下的同步调用链路及基于事件机制的预算更新过程。</div>
+</div>
+</body>
+</html>

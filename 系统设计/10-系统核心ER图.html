@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>图4-3 系统核心实体关系图</title>
+  <style>
+    body{margin:0;padding:24px;background:#fff;font-family:"SimSun","Songti SC","Times New Roman",serif;color:#111}.page{max-width:1320px;margin:0 auto}h1{text-align:center;font-size:24px;margin:0 0 10px}.desc{font-size:14px;line-height:1.8;text-indent:2em}.figure-title,.figure-note{text-align:center;font-size:14px;line-height:1.8}.figure-title{font-weight:700;margin-top:10px}svg{width:100%;height:auto;border:1px solid #bbb;background:#fff}.entity{fill:#fff;stroke:#333;stroke-width:1.5;rx:6;ry:6}.entity-main{fill:#eef4ff;stroke:#2f5fa7;stroke-width:1.7;rx:6;ry:6}.entity-sub{fill:#f7f7f7;stroke:#333;stroke-width:1.4;rx:6;ry:6}.line{stroke:#333;stroke-width:1.4;fill:none;marker-end:url(#arrow)}.dash{stroke:#555;stroke-width:1.3;stroke-dasharray:7 4;fill:none;marker-end:url(#arrow)}.divider{stroke:#888;stroke-width:1}.title{font-size:20px;font-weight:700}.node{font-size:14px;font-weight:700;text-anchor:middle}.txt{font-size:12px}.label{font-size:12px;text-anchor:middle}
+  </style>
+</head>
+<body>
+<div class="page">
+<h1>4.3 系统核心实体关系图</h1>
+<p class="desc">实体关系图用于描述本系统数据库中核心实体及其联系。根据数据库设计文档，系统的主要实体包括用户、账户、交易、分类、预算以及行情历史等对象。其中，交易实体处于业务核心位置，它与账户、分类、用户和预算等实体均存在直接或间接联系。</p>
+<svg viewBox="0 0 1400 980" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#333"/></marker></defs>
+<text x="700" y="42" class="title" text-anchor="middle">Brollo_plus 核心数据实体关系图</text>
+<rect x="70" y="150" width="240" height="220" class="entity-main"/><line x1="70" y1="182" x2="310" y2="182" class="divider"/><text x="190" y="171" class="node">User</text><text x="90" y="208" class="txt">PK id</text><text x="90" y="232" class="txt">username</text><text x="90" y="256" class="txt">email</text><text x="90" y="280" class="txt">password_hash</text><text x="90" y="304" class="txt">full_name</text><text x="90" y="328" class="txt">settings</text><text x="90" y="352" class="txt">created_at / updated_at</text>
+<rect x="400" y="120" width="260" height="260" class="entity"/><line x1="400" y1="152" x2="660" y2="152" class="divider"/><text x="530" y="141" class="node">Account</text><text x="420" y="178" class="txt">PK id</text><text x="420" y="202" class="txt">FK user_id</text><text x="420" y="226" class="txt">name</text><text x="420" y="250" class="txt">type</text><text x="420" y="274" class="txt">currency</text><text x="420" y="298" class="txt">initial_balance</text><text x="420" y="322" class="txt">current_balance</text><text x="420" y="346" class="txt">status</text>
+<rect x="750" y="90" width="300" height="340" class="entity"/><line x1="750" y1="122" x2="1050" y2="122" class="divider"/><text x="900" y="111" class="node">Transaction</text><text x="770" y="148" class="txt">PK id</text><text x="770" y="172" class="txt">FK user_id</text><text x="770" y="196" class="txt">FK account_id</text><text x="770" y="220" class="txt">FK to_account_id (可选)</text><text x="770" y="244" class="txt">FK category_id</text><text x="770" y="268" class="txt">type</text><text x="770" y="292" class="txt">amount / currency</text><text x="770" y="316" class="txt">description / payee</text><text x="770" y="340" class="txt">transaction_date</text><text x="770" y="364" class="txt">tags / attachments / status</text><text x="770" y="388" class="txt">dedup_hash / external_id</text>
+<rect x="1120" y="140" width="230" height="220" class="entity-sub"/><line x1="1120" y1="172" x2="1350" y2="172" class="divider"/><text x="1235" y="161" class="node">Category</text><text x="1140" y="198" class="txt">PK id</text><text x="1140" y="222" class="txt">FK user_id (nullable)</text><text x="1140" y="246" class="txt">name</text><text x="1140" y="270" class="txt">type</text><text x="1140" y="294" class="txt">parent_id</text><text x="1140" y="318" class="txt">is_system / is_archived</text>
+<rect x="470" y="580" width="290" height="250" class="entity-sub"/><line x1="470" y1="612" x2="760" y2="612" class="divider"/><text x="615" y="601" class="node">Budget</text><text x="490" y="638" class="txt">PK id</text><text x="490" y="662" class="txt">FK user_id</text><text x="490" y="686" class="txt">name / type</text><text x="490" y="710" class="txt">start_date / end_date</text><text x="490" y="734" class="txt">amount / currency</text><text x="490" y="758" class="txt">category_ids[] / account_ids[]</text><text x="490" y="782" class="txt">spent / remaining / progress</text><text x="490" y="806" class="txt">alert_thresholds / prediction</text>
+<rect x="890" y="610" width="260" height="190" class="entity-sub"/><line x1="890" y1="642" x2="1150" y2="642" class="divider"/><text x="1020" y="631" class="node">QuoteHistory</text><text x="910" y="668" class="txt">PK id</text><text x="910" y="692" class="txt">symbol / market</text><text x="910" y="716" class="txt">price / currency</text><text x="910" y="740" class="txt">source</text><text x="910" y="764" class="txt">timestamp</text>
+<path d="M310 230 L400 230" class="line"/><text x="355" y="216" class="label">1:N</text>
+<path d="M310 286 L750 286" class="line"/><text x="530" y="270" class="label">1:N</text>
+<path d="M660 250 L750 250" class="line"/><text x="705" y="236" class="label">1:N</text>
+<path d="M1050 250 L1120 250" class="line"/><text x="1085" y="236" class="label">N:1</text>
+<path d="M190 370 C190 470,470 480,470 650" class="line"/><text x="290" y="470" class="label">1:N</text>
+<path d="M900 430 C900 500,700 500,700 580" class="dash"/><text x="812" y="486" class="label">交易汇总驱动预算执行</text>
+<path d="M1235 360 C1235 470,760 470,760 720" class="dash"/><text x="1015" y="486" class="label">分类集合用于预算约束</text>
+<path d="M600 380 C700 500,930 500,1020 610" class="dash"/><text x="820" y="520" class="label">账户估值依赖行情时序</text>
+<text x="60" y="930" class="txt">注：ER 图中采用 1:N 表示一对多关系，虚线用于表示非直接外键但具有业务依赖的关联关系。</text>
+</svg>
+<div class="figure-title">图4-3 系统核心实体关系图</div>
+<div class="figure-note">注：图中关系依据数据库设计文档进行抽象，重点突出交易实体与用户、账户、分类、预算之间的联系。</div>
+</div>
+</body>
+</html>
