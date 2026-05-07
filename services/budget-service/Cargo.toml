@@ -20,7 +20,7 @@ tower-http = { version = "0.6", features = ["trace", "cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
-time = { version = "0.3", features = ["serde-human-readable"] }
+time = { version = "0.3", features = ["serde-human-readable", "macros"] }
 jsonwebtoken = "9"
 bson = { version = "2", features = ["uuid-1"] }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }

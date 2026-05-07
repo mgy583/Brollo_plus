@@ -8,10 +8,16 @@ use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Claims { pub sub: String, pub exp: usize, pub iat: usize }
+pub struct Claims {
+    pub sub: String,
+    pub exp: usize,
+    pub iat: usize,
+}
 
 #[derive(Clone)]
-pub struct AuthUser { pub user_id: String }
+pub struct AuthUser {
+    pub user_id: String,
+}
 
 pub async fn require_auth(
     State(state): State<crate::AppState>,
@@ -29,7 +35,10 @@ pub async fn require_auth(
         &token,
         &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
         &Validation::default(),
-    ).map_err(|_| StatusCode::UNAUTHORIZED)?;
-    req.extensions_mut().insert(AuthUser { user_id: td.claims.sub });
+    )
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    req.extensions_mut().insert(AuthUser {
+        user_id: td.claims.sub,
+    });
     Ok(next.run(req).await)
 }

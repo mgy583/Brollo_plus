@@ -1,10 +1,7 @@
-use anyhow::Result;
-use mongodb::{
-    bson::doc,
-    options::IndexOptions,
-    Database, IndexModel,
-};
 use crate::AppState;
+use anyhow::Result;
+use mongodb::{bson::doc, options::IndexOptions, Database, IndexModel};
+use redis::AsyncCommands;
 
 pub async fn ensure_indexes(db: &Database) -> Result<()> {
     let col = db.collection::<bson::Document>("budgets");
@@ -35,12 +32,12 @@ pub async fn ensure_timescale_tables(pool: &sqlx::PgPool) -> Result<()> {
 }
 
 pub async fn consume_transaction_events(state: AppState) -> Result<()> {
+    use futures::StreamExt;
     use lapin::{
         options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions},
         types::FieldTable,
         Connection, ConnectionProperties,
     };
-    use futures::StreamExt;
 
     let conn = loop {
         match Connection::connect(&state.rabbitmq_url, ConnectionProperties::default()).await {
@@ -56,7 +53,10 @@ pub async fn consume_transaction_events(state: AppState) -> Result<()> {
     channel
         .queue_declare(
             "transaction.created",
-            QueueDeclareOptions { durable: true, ..Default::default() },
+            QueueDeclareOptions {
+                durable: true,
+                ..Default::default()
+            },
             FieldTable::default(),
         )
         .await?;
@@ -89,8 +89,8 @@ pub async fn consume_transaction_events(state: AppState) -> Result<()> {
 }
 
 async fn process_transaction_event(state: &AppState, event: &serde_json::Value) -> Result<()> {
-    use futures::TryStreamExt;
     use crate::models::Budget;
+    use futures::TryStreamExt;
 
     let user_id = event["user_id"].as_str().unwrap_or("");
     let amount = event["amount"].as_f64().unwrap_or(0.0);
@@ -98,7 +98,9 @@ async fn process_transaction_event(state: &AppState, event: &serde_json::Value) 
     let category_id = event["category_id"].as_str().unwrap_or("");
     let tx_date = event["transaction_date"].as_str().unwrap_or("");
 
-    if tx_type != "expense" { return Ok(()); }
+    if tx_type != "expense" {
+        return Ok(());
+    }
 
     let col = state.mongo.collection::<Budget>("budgets");
     let filter = doc! {
@@ -111,15 +113,25 @@ async fn process_transaction_event(state: &AppState, event: &serde_json::Value) 
     let budgets: Vec<Budget> = cursor.try_collect().await?;
 
     for budget in budgets {
-        let matches = budget.category_ids.is_empty()
-            || budget.category_ids.iter().any(|c| c == category_id);
-        if !matches { continue; }
+        let matches =
+            budget.category_ids.is_empty() || budget.category_ids.iter().any(|c| c == category_id);
+        if !matches {
+            continue;
+        }
 
         let new_spent = budget.spent + amount;
         let new_remaining = (budget.amount - new_spent).max(0.0);
-        let new_progress = if budget.amount > 0.0 {
-            (new_spent / budget.amount * 100.0).min(100.0)
-        } else { 0.0 };
+        let previous_usage = if budget.amount > 0.0 {
+            budget.spent / budget.amount
+        } else {
+            0.0
+        };
+        let new_usage = if budget.amount > 0.0 {
+            new_spent / budget.amount
+        } else {
+            0.0
+        };
+        let new_progress = (new_usage * 100.0).min(100.0);
 
         if let Some(budget_oid) = budget.id {
             let now = bson::DateTime::now();
@@ -133,7 +145,67 @@ async fn process_transaction_event(state: &AppState, event: &serde_json::Value) 
             .bind(budget_oid.to_hex()).bind(user_id)
             .bind(new_spent).bind(new_remaining).bind(new_progress)
             .execute(&state.timescale).await;
+
+            let alert_threshold = budget.alert_threshold.clamp(0.0, 1.0);
+            let should_alert = (previous_usage < alert_threshold && new_usage >= alert_threshold)
+                || (previous_usage <= 1.0 && new_usage > 1.0);
+            if should_alert {
+                let level = if new_usage > 1.0 { "red" } else { "yellow" };
+                let alert_event = serde_json::json!({
+                    "budget_id": budget_oid.to_hex(),
+                    "user_id": user_id,
+                    "family_id": budget.family_id,
+                    "level": level,
+                    "usage": new_usage,
+                    "progress": new_progress,
+                    "spent": new_spent,
+                    "amount": budget.amount,
+                    "remaining": new_remaining,
+                    "threshold": alert_threshold,
+                });
+                let _ = publish_event(
+                    &state.rabbitmq_url,
+                    "budget.exceeded",
+                    alert_event.to_string(),
+                )
+                .await;
+            }
+
+            let mut redis = state.redis.clone();
+            let _ = redis
+                .del::<_, ()>(format!("budgets:list:{}", user_id))
+                .await;
         }
     }
+    Ok(())
+}
+
+async fn publish_event(rabbitmq_url: &str, queue: &str, body: String) -> anyhow::Result<()> {
+    use lapin::{
+        options::{BasicPublishOptions, QueueDeclareOptions},
+        types::FieldTable,
+        BasicProperties, Connection, ConnectionProperties,
+    };
+    let conn = Connection::connect(rabbitmq_url, ConnectionProperties::default()).await?;
+    let channel = conn.create_channel().await?;
+    channel
+        .queue_declare(
+            queue,
+            QueueDeclareOptions {
+                durable: true,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await?;
+    channel
+        .basic_publish(
+            "",
+            queue,
+            BasicPublishOptions::default(),
+            body.as_bytes(),
+            BasicProperties::default().with_content_type("application/json".into()),
+        )
+        .await?;
     Ok(())
 }

@@ -2,11 +2,7 @@ mod auth;
 mod db;
 mod handlers;
 
-use axum::{
-    middleware,
-    routing::get,
-    Router,
-};
+use axum::{middleware, routing::get, Router};
 use dotenvy::dotenv;
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
@@ -38,13 +34,17 @@ async fn main() -> anyhow::Result<()> {
 
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "dev-secret-change-me".into());
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
-    let timescale_url = std::env::var("TIMESCALE_URL")
-        .unwrap_or_else(|_| "postgres://abook:abook_password@localhost:5432/abook_timeseries".into());
+    let timescale_url = std::env::var("TIMESCALE_URL").unwrap_or_else(|_| {
+        "postgres://abook:abook_password@localhost:5432/abook_timeseries".into()
+    });
 
     let redis_client = redis::Client::open(redis_url)?;
     let redis_cm = ConnectionManager::new(redis_client).await?;
 
-    let timescale = PgPoolOptions::new().max_connections(5).connect(&timescale_url).await?;
+    let timescale = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&timescale_url)
+        .await?;
     db::ensure_tables(&timescale).await?;
 
     let state = AppState {
@@ -62,7 +62,10 @@ async fn main() -> anyhow::Result<()> {
 
     let api = Router::new()
         .route("/quotes/exchange-rates", get(handlers::quotes::get_rates))
-        .route("/quotes/exchange-rates/history", get(handlers::quotes::get_rate_history))
+        .route(
+            "/quotes/exchange-rates/history",
+            get(handlers::quotes::get_rate_history),
+        )
         .route("/quotes/net-worth", get(handlers::quotes::net_worth))
         .layer(auth_mw)
         .with_state(state.clone());

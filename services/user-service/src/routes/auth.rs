@@ -146,10 +146,18 @@ async fn register(
             if db.constraint().is_some() {
                 ("CONFLICT", "用户名或邮箱已存在", StatusCode::CONFLICT)
             } else {
-                ("INTERNAL_ERROR", "数据库错误", StatusCode::INTERNAL_SERVER_ERROR)
+                (
+                    "INTERNAL_ERROR",
+                    "数据库错误",
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
             }
         } else {
-            ("INTERNAL_ERROR", "数据库错误", StatusCode::INTERNAL_SERVER_ERROR)
+            (
+                "INTERNAL_ERROR",
+                "数据库错误",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )
         };
         err(status, code, msg, None, request_id.clone())
     })?;
@@ -164,8 +172,8 @@ async fn register(
         created_at: rec.created_at.assume_utc(),
     };
 
-    let tokens = issue_tokens(&state.jwt_secret, &user.uuid, &user.username, &user.role)
-        .map_err(|_| {
+    let tokens =
+        issue_tokens(&state.jwt_secret, &user.uuid, &user.username, &user.role).map_err(|_| {
             err(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
@@ -176,24 +184,32 @@ async fn register(
         })?;
 
     // store refresh token hash
-    store_refresh_session(&state.db, user.id, &tokens.refresh_token, req_to_device_info(None))
-        .await
-        .map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL_ERROR",
-                "会话创建失败",
-                None,
-                request_id.clone(),
-            )
-        })?;
+    store_refresh_session(
+        &state.db,
+        user.id,
+        &tokens.refresh_token,
+        req_to_device_info(None),
+    )
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "INTERNAL_ERROR",
+            "会话创建失败",
+            None,
+            request_id.clone(),
+        )
+    })?;
 
     let body = ok(
         serde_json::json!({ "user": user, "tokens": tokens }),
         "操作成功",
         request_id,
     );
-    Ok((StatusCode::CREATED, axum::Json(serde_json::to_value(body).unwrap())))
+    Ok((
+        StatusCode::CREATED,
+        axum::Json(serde_json::to_value(body).unwrap()),
+    ))
 }
 
 async fn login(
@@ -213,7 +229,15 @@ async fn login(
     .bind(&req.username)
     .fetch_optional(&state.db)
     .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "数据库错误", None, request_id.clone()))?;
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "INTERNAL_ERROR",
+            "数据库错误",
+            None,
+            request_id.clone(),
+        )
+    })?;
 
     let Some(rec) = rec else {
         return Err(err(
@@ -258,12 +282,33 @@ async fn login(
         created_at: rec.created_at.assume_utc(),
     };
 
-    let tokens = issue_tokens(&state.jwt_secret, &user.uuid, &user.username, &user.role)
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "签发令牌失败", None, request_id.clone()))?;
+    let tokens =
+        issue_tokens(&state.jwt_secret, &user.uuid, &user.username, &user.role).map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+                "签发令牌失败",
+                None,
+                request_id.clone(),
+            )
+        })?;
 
-    store_refresh_session(&state.db, user.id, &tokens.refresh_token, req_to_device_info(req.device_info))
-        .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "会话创建失败", None, request_id.clone()))?;
+    store_refresh_session(
+        &state.db,
+        user.id,
+        &tokens.refresh_token,
+        req_to_device_info(req.device_info),
+    )
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "INTERNAL_ERROR",
+            "会话创建失败",
+            None,
+            request_id.clone(),
+        )
+    })?;
 
     let body = ok(
         serde_json::json!({ "user": user, "tokens": tokens }),
@@ -312,7 +357,15 @@ async fn refresh(
     .bind(&refresh_hash)
     .fetch_optional(&state.db)
     .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "数据库错误", None, request_id.clone()))?;
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "INTERNAL_ERROR",
+            "数据库错误",
+            None,
+            request_id.clone(),
+        )
+    })?;
 
     if exists.is_none() {
         return Err(err(
@@ -334,8 +387,21 @@ async fn refresh(
         )
     })?;
 
-    let access_token = issue_access(&state.jwt_secret, &user_uuid, &claims.username, &claims.role)
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "签发令牌失败", None, request_id.clone()))?;
+    let access_token = issue_access(
+        &state.jwt_secret,
+        &user_uuid,
+        &claims.username,
+        &claims.role,
+    )
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "INTERNAL_ERROR",
+            "签发令牌失败",
+            None,
+            request_id.clone(),
+        )
+    })?;
 
     let body = ok(
         serde_json::json!({ "access_token": access_token, "expires_in": 7200 }),
@@ -356,7 +422,15 @@ async fn logout(
         .bind(&refresh_hash)
         .execute(&state.db)
         .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "数据库错误", None, request_id.clone()))?;
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+                "数据库错误",
+                None,
+                request_id.clone(),
+            )
+        })?;
 
     let body = ok(serde_json::json!({}), "登出成功", request_id);
     Ok(axum::Json(serde_json::to_value(body).unwrap()))
@@ -463,4 +537,3 @@ fn sha256_hex(input: &str) -> String {
     hasher.update(input.as_bytes());
     hex::encode(hasher.finalize())
 }
-

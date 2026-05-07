@@ -1,8 +1,8 @@
 use axum::Router;
 
 mod auth;
-mod users;
 pub mod families;
+mod users;
 
 pub fn router() -> Router<crate::state::AppState> {
     Router::new()

@@ -6,9 +6,12 @@ use axum::{
 };
 use bson::doc;
 use futures::TryStreamExt;
-use mongodb::bson::{Bson, Document};
+use mongodb::bson::Document;
+use redis::AsyncCommands;
 use serde::Deserialize;
 use serde_json::{json, Value};
+
+const REPORT_CACHE_TTL_SECONDS: u64 = 300;
 
 #[derive(Deserialize)]
 pub struct DateRangeQuery {
@@ -21,14 +24,72 @@ pub struct DateRangeQuery {
     pub member_id: Option<String>, // 按成员筛选
 }
 
+fn report_cache_key(endpoint: &str, user_id: &str, q: &DateRangeQuery) -> String {
+    format!(
+        "reports:{}:{}:{}:{}:{}:{}:{}:{}",
+        endpoint,
+        user_id,
+        q.start_date.as_deref().unwrap_or(""),
+        q.end_date.as_deref().unwrap_or(""),
+        q.tx_type.as_deref().unwrap_or(""),
+        q.interval.as_deref().unwrap_or(""),
+        q.family_id.as_deref().unwrap_or(""),
+        q.member_id.as_deref().unwrap_or("")
+    )
+}
+
+async fn read_cached_report(state: &AppState, key: &str) -> Option<Value> {
+    let mut redis = state.redis.clone();
+    let cached: String = redis.get(key).await.ok()?;
+    serde_json::from_str(&cached).ok()
+}
+
+async fn write_cached_report(state: &AppState, key: &str, value: &Value) {
+    let mut redis = state.redis.clone();
+    if let Ok(payload) = serde_json::to_string(value) {
+        let _ = redis
+            .set_ex::<_, _, ()>(key, payload, REPORT_CACHE_TTL_SECONDS)
+            .await;
+    }
+}
+
+fn scoped_match_doc(auth: &AuthUser, q: &DateRangeQuery) -> Document {
+    let mut match_doc = if let Some(fid) = &q.family_id {
+        let mut d = doc! { "family_id": fid, "status": { "$ne": "deleted" } };
+        if let Some(mid) = &q.member_id {
+            d.insert("user_id", mid);
+        }
+        d
+    } else {
+        doc! { "user_id": &auth.user_id, "status": { "$ne": "deleted" } }
+    };
+
+    if q.start_date.is_some() || q.end_date.is_some() {
+        let mut date_filter = doc! {};
+        if let Some(s) = &q.start_date {
+            date_filter.insert("$gte", s);
+        }
+        if let Some(e) = &q.end_date {
+            date_filter.insert("$lte", e);
+        }
+        match_doc.insert("transaction_date", date_filter);
+    }
+
+    match_doc
+}
+
 pub async fn overview(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthUser>,
     Query(q): Query<DateRangeQuery>,
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Document>("transactions");
+    let cache_key = report_cache_key("overview", &auth.user_id, &q);
+    if let Some(cached) = read_cached_report(&state, &cache_key).await {
+        return Ok(Json(cached));
+    }
 
-    let mut match_doc = if let Some(fid) = &q.family_id { let mut d = doc! { "family_id": fid, "status": { "$ne": "deleted" } }; if let Some(mid) = &q.member_id { d.insert("user_id", mid); } d } else { doc! { "user_id": &auth.user_id, "status": { "$ne": "deleted" } } }; if q.start_date.is_some() || q.end_date.is_some() { let mut date_filter = doc! {}; if let Some(s) = &q.start_date { date_filter.insert("$gte", s); } if let Some(e) = &q.end_date { date_filter.insert("$lte", e); } match_doc.insert("transaction_date", date_filter); }
+    let match_doc = scoped_match_doc(&auth, &q);
 
     let pipeline = vec![
         doc! { "$match": match_doc.clone() },
@@ -39,9 +100,13 @@ pub async fn overview(
         }},
     ];
 
-    let cursor = col.aggregate(pipeline).await
+    let cursor = col
+        .aggregate(pipeline)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let rows: Vec<Document> = cursor.try_collect().await
+    let rows: Vec<Document> = cursor
+        .try_collect()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut total_income = 0.0f64;
@@ -51,25 +116,37 @@ pub async fn overview(
     for row in &rows {
         let kind = row.get_str("_id").unwrap_or("");
         let total = row.get_f64("total").unwrap_or(0.0);
-        let count = row.get_i32("count").map(|c| c as i64)
-            .or_else(|_| row.get_i64("count")).unwrap_or(0);
+        let count = row
+            .get_i32("count")
+            .map(|c| c as i64)
+            .or_else(|_| row.get_i64("count"))
+            .unwrap_or(0);
         match kind {
-            "income" => { total_income = total; tx_count += count; }
-            "expense" => { total_expense = total; tx_count += count; }
+            "income" => {
+                total_income = total;
+                tx_count += count;
+            }
+            "expense" => {
+                total_expense = total;
+                tx_count += count;
+            }
             _ => {}
         }
     }
 
-    // Top expense categories
     let cat_pipeline = vec![
         doc! { "$match": { "user_id": &auth.user_id, "type": "expense", "status": { "$ne": "deleted" } } },
         doc! { "$group": { "_id": "$category_id", "amount": { "$sum": "$amount" }, "count": { "$sum": 1 } } },
         doc! { "$sort": { "amount": -1 } },
         doc! { "$limit": 5 },
     ];
-    let cat_cursor = col.aggregate(cat_pipeline).await
+    let cat_cursor = col
+        .aggregate(cat_pipeline)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let cat_rows: Vec<Document> = cat_cursor.try_collect().await
+    let cat_rows: Vec<Document> = cat_cursor
+        .try_collect()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let top_cats: Vec<Value> = cat_rows.iter().map(|r| json!({
         "category_id": r.get_str("_id").unwrap_or(""),
@@ -77,7 +154,7 @@ pub async fn overview(
         "count": r.get_i32("count").map(|c| c as i64).or_else(|_| r.get_i64("count")).unwrap_or(0)
     })).collect();
 
-    Ok(Json(json!({
+    let response = json!({
         "success": true,
         "data": {
             "total_income": total_income,
@@ -87,7 +164,9 @@ pub async fn overview(
             "top_expense_categories": top_cats
         },
         "message": "ok"
-    })))
+    });
+    write_cached_report(&state, &cache_key, &response).await;
+    Ok(Json(response))
 }
 
 pub async fn categories(
@@ -96,19 +175,14 @@ pub async fn categories(
     Query(q): Query<DateRangeQuery>,
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Document>("transactions");
+    let cache_key = report_cache_key("categories", &auth.user_id, &q);
+    if let Some(cached) = read_cached_report(&state, &cache_key).await {
+        return Ok(Json(cached));
+    }
     let tx_type = q.tx_type.as_deref().unwrap_or("expense");
 
-    let mut match_doc = doc! {
-        "user_id": &auth.user_id,
-        "type": tx_type,
-        "status": { "$ne": "deleted" }
-    };
-    if q.start_date.is_some() || q.end_date.is_some() {
-        let mut df = doc! {};
-        if let Some(s) = &q.start_date { df.insert("$gte", s); }
-        if let Some(e) = &q.end_date { df.insert("$lte", e); }
-        match_doc.insert("transaction_date", df);
-    }
+    let mut match_doc = scoped_match_doc(&auth, &q);
+    match_doc.insert("type", tx_type);
 
     let pipeline = vec![
         doc! { "$match": match_doc },
@@ -120,12 +194,17 @@ pub async fn categories(
         doc! { "$sort": { "amount": -1 } },
     ];
 
-    let cursor = col.aggregate(pipeline).await
+    let cursor = col
+        .aggregate(pipeline)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let rows: Vec<Document> = cursor.try_collect().await
+    let rows: Vec<Document> = cursor
+        .try_collect()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let total: f64 = rows.iter()
+    let total: f64 = rows
+        .iter()
         .map(|r| r.get_f64("amount").unwrap_or(0.0))
         .sum();
 
@@ -140,11 +219,13 @@ pub async fn categories(
         })
     }).collect();
 
-    Ok(Json(json!({
+    let response = json!({
         "success": true,
         "data": { "categories": cats, "total": total },
         "message": "ok"
-    })))
+    });
+    write_cached_report(&state, &cache_key, &response).await;
+    Ok(Json(response))
 }
 
 pub async fn trend(
@@ -153,20 +234,13 @@ pub async fn trend(
     Query(q): Query<DateRangeQuery>,
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Document>("transactions");
+    let cache_key = report_cache_key("trend", &auth.user_id, &q);
+    if let Some(cached) = read_cached_report(&state, &cache_key).await {
+        return Ok(Json(cached));
+    }
     let interval = q.interval.as_deref().unwrap_or("month");
 
-    let mut match_doc = doc! {
-        "user_id": &auth.user_id,
-        "status": { "$ne": "deleted" }
-    };
-    if q.start_date.is_some() || q.end_date.is_some() {
-        let mut df = doc! {};
-        if let Some(s) = &q.start_date { df.insert("$gte", s); }
-        if let Some(e) = &q.end_date { df.insert("$lte", e); }
-        match_doc.insert("transaction_date", df);
-    }
-
-    // Group by date prefix based on interval
+    let match_doc = scoped_match_doc(&auth, &q);
     let date_len: i32 = match interval {
         "day" => 10,
         "week" => 8,
@@ -185,16 +259,23 @@ pub async fn trend(
         doc! { "$sort": { "_id.date": 1 } },
     ];
 
-    let cursor = col.aggregate(pipeline).await
+    let cursor = col
+        .aggregate(pipeline)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let rows: Vec<Document> = cursor.try_collect().await
+    let rows: Vec<Document> = cursor
+        .try_collect()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Merge into date-keyed map
     let mut map: std::collections::BTreeMap<String, (f64, f64)> = std::collections::BTreeMap::new();
     for row in &rows {
         let id = row.get_document("_id").ok();
-        let date = id.and_then(|d| d.get_str("date").ok()).unwrap_or("").to_string();
+        let date = id
+            .and_then(|d| d.get_str("date").ok())
+            .unwrap_or("")
+            .to_string();
         let kind = id.and_then(|d| d.get_str("type").ok()).unwrap_or("");
         let amt = row.get_f64("amount").unwrap_or(0.0);
         let entry = map.entry(date).or_insert((0.0, 0.0));
@@ -205,18 +286,25 @@ pub async fn trend(
         }
     }
 
-    let series: Vec<Value> = map.into_iter().map(|(date, (income, expense))| json!({
-        "date": date,
-        "income": income,
-        "expense": expense,
-        "net": income - expense
-    })).collect();
+    let series: Vec<Value> = map
+        .into_iter()
+        .map(|(date, (income, expense))| {
+            json!({
+                "date": date,
+                "income": income,
+                "expense": expense,
+                "net": income - expense
+            })
+        })
+        .collect();
 
-    Ok(Json(json!({
+    let response = json!({
         "success": true,
         "data": { "series": series },
         "message": "ok"
-    })))
+    });
+    write_cached_report(&state, &cache_key, &response).await;
+    Ok(Json(response))
 }
 
 pub async fn accounts(
@@ -225,17 +313,12 @@ pub async fn accounts(
     Query(q): Query<DateRangeQuery>,
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Document>("transactions");
-
-    let mut match_doc = doc! {
-        "user_id": &auth.user_id,
-        "status": { "$ne": "deleted" }
-    };
-    if q.start_date.is_some() || q.end_date.is_some() {
-        let mut df = doc! {};
-        if let Some(s) = &q.start_date { df.insert("$gte", s); }
-        if let Some(e) = &q.end_date { df.insert("$lte", e); }
-        match_doc.insert("transaction_date", df);
+    let cache_key = report_cache_key("accounts", &auth.user_id, &q);
+    if let Some(cached) = read_cached_report(&state, &cache_key).await {
+        return Ok(Json(cached));
     }
+
+    let match_doc = scoped_match_doc(&auth, &q);
 
     let pipeline = vec![
         doc! { "$match": match_doc },
@@ -245,15 +328,23 @@ pub async fn accounts(
         }},
     ];
 
-    let cursor = col.aggregate(pipeline).await
+    let cursor = col
+        .aggregate(pipeline)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let rows: Vec<Document> = cursor.try_collect().await
+    let rows: Vec<Document> = cursor
+        .try_collect()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mut acc_map: std::collections::HashMap<String, (f64, f64)> = std::collections::HashMap::new();
+    let mut acc_map: std::collections::HashMap<String, (f64, f64)> =
+        std::collections::HashMap::new();
     for row in &rows {
         let id = row.get_document("_id").ok();
-        let acc = id.and_then(|d| d.get_str("account_id").ok()).unwrap_or("").to_string();
+        let acc = id
+            .and_then(|d| d.get_str("account_id").ok())
+            .unwrap_or("")
+            .to_string();
         let kind = id.and_then(|d| d.get_str("type").ok()).unwrap_or("");
         let amt = row.get_f64("amount").unwrap_or(0.0);
         let entry = acc_map.entry(acc).or_insert((0.0, 0.0));
@@ -264,17 +355,23 @@ pub async fn accounts(
         }
     }
 
-    let result: Vec<Value> = acc_map.into_iter().map(|(acc_id, (income, expense))| json!({
-        "account_id": acc_id,
-        "income": income,
-        "expense": expense,
-        "net": income - expense
-    })).collect();
+    let result: Vec<Value> = acc_map
+        .into_iter()
+        .map(|(acc_id, (income, expense))| {
+            json!({
+                "account_id": acc_id,
+                "income": income,
+                "expense": expense,
+                "net": income - expense
+            })
+        })
+        .collect();
 
-    Ok(Json(json!({
+    let response = json!({
         "success": true,
         "data": { "accounts": result },
         "message": "ok"
-    })))
+    });
+    write_cached_report(&state, &cache_key, &response).await;
+    Ok(Json(response))
 }
-

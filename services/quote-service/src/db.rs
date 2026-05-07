@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::AppState;
+use anyhow::Result;
 
 pub async fn ensure_tables(pool: &sqlx::PgPool) -> Result<()> {
     sqlx::query(
@@ -17,16 +17,13 @@ pub async fn ensure_tables(pool: &sqlx::PgPool) -> Result<()> {
 }
 
 /// Store a rate in Redis and TimescaleDB
-pub async fn store_rate(
-    state: &AppState,
-    base: &str,
-    target: &str,
-    rate: f64,
-) -> Result<()> {
+pub async fn store_rate(state: &AppState, base: &str, target: &str, rate: f64) -> Result<()> {
     use redis::AsyncCommands;
     let key = format!("abook:rate:{}:{}:latest", base, target);
     let mut redis = state.redis.clone();
-    redis.set_ex::<_, _, ()>(key, rate.to_string(), 3600).await?;
+    redis
+        .set_ex::<_, _, ()>(key, rate.to_string(), 3600)
+        .await?;
 
     sqlx::query(
         "INSERT INTO exchange_rate_history (base_currency, target_currency, rate, source) VALUES ($1,$2,$3,'seed')"

@@ -11,4 +11,3 @@ impl AppState {
         Self { db, jwt_secret }
     }
 }
-

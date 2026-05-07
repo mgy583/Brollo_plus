@@ -1,9 +1,5 @@
 use anyhow::Result;
-use mongodb::{
-    bson::doc,
-    options::IndexOptions,
-    Database, IndexModel,
-};
+use mongodb::{bson::doc, options::IndexOptions, Database, IndexModel};
 
 pub async fn ensure_indexes(db: &Database) -> Result<()> {
     // accounts indexes

@@ -89,11 +89,25 @@ async fn get_me(
             request_id.clone(),
         )
     })?;
-    let claims = verify_access(&state.jwt_secret, &token)
-        .map_err(|_| err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权", None, request_id.clone()))?;
+    let claims = verify_access(&state.jwt_secret, &token).map_err(|_| {
+        err(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "未授权",
+            None,
+            request_id.clone(),
+        )
+    })?;
 
-    let user_uuid = Uuid::parse_str(&claims.sub)
-        .map_err(|_| err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权", None, request_id.clone()))?;
+    let user_uuid = Uuid::parse_str(&claims.sub).map_err(|_| {
+        err(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "未授权",
+            None,
+            request_id.clone(),
+        )
+    })?;
 
     let rec: MeRow = sqlx::query_as(
         r#"
@@ -144,11 +158,25 @@ async fn update_me(
             request_id.clone(),
         )
     })?;
-    let claims = verify_access(&state.jwt_secret, &token)
-        .map_err(|_| err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权", None, request_id.clone()))?;
+    let claims = verify_access(&state.jwt_secret, &token).map_err(|_| {
+        err(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "未授权",
+            None,
+            request_id.clone(),
+        )
+    })?;
 
-    let user_uuid = Uuid::parse_str(&claims.sub)
-        .map_err(|_| err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权", None, request_id.clone()))?;
+    let user_uuid = Uuid::parse_str(&claims.sub).map_err(|_| {
+        err(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "未授权",
+            None,
+            request_id.clone(),
+        )
+    })?;
 
     let rec: MeRow = sqlx::query_as(
         r#"
@@ -196,12 +224,32 @@ async fn update_settings(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<common::ApiError>)> {
     let request_id = request_id_from_headers(&headers);
     let token = bearer_from_headers(&headers).ok_or_else(|| {
-        err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权", None, request_id.clone())
+        err(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "未授权",
+            None,
+            request_id.clone(),
+        )
     })?;
-    let claims = verify_access(&state.jwt_secret, &token)
-        .map_err(|_| err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权", None, request_id.clone()))?;
-    let user_uuid = Uuid::parse_str(&claims.sub)
-        .map_err(|_| err(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "未授权", None, request_id.clone()))?;
+    let claims = verify_access(&state.jwt_secret, &token).map_err(|_| {
+        err(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "未授权",
+            None,
+            request_id.clone(),
+        )
+    })?;
+    let user_uuid = Uuid::parse_str(&claims.sub).map_err(|_| {
+        err(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "未授权",
+            None,
+            request_id.clone(),
+        )
+    })?;
     sqlx::query(
         "UPDATE users SET default_currency=COALESCE($1,default_currency),timezone=COALESCE($2,timezone),language=COALESCE($3,language),theme=COALESCE($4,theme),updated_at=NOW() WHERE uuid=$5"
     )
@@ -217,9 +265,15 @@ async fn update_settings(
     ).bind(user_uuid).fetch_one(&state.db).await
     .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "数据库错误", None, request_id.clone()))?;
     let me = MeResponse {
-        id: rec.id, uuid: rec.uuid, username: rec.username, email: rec.email,
-        full_name: rec.full_name, phone: rec.phone, role: rec.role,
-        status: rec.status, created_at: rec.created_at.assume_utc(),
+        id: rec.id,
+        uuid: rec.uuid,
+        username: rec.username,
+        email: rec.email,
+        full_name: rec.full_name,
+        phone: rec.phone,
+        role: rec.role,
+        status: rec.status,
+        created_at: rec.created_at.assume_utc(),
         settings: serde_json::json!({
             "default_currency": rec.default_currency,
             "timezone": rec.timezone,
@@ -227,7 +281,9 @@ async fn update_settings(
             "theme": rec.theme,
         }),
     };
-    Ok(Json(serde_json::to_value(ok(me, "设置已保存", request_id)).unwrap()))
+    Ok(Json(
+        serde_json::to_value(ok(me, "设置已保存", request_id)).unwrap(),
+    ))
 }
 
 fn verify_access(secret: &str, token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
@@ -250,4 +306,3 @@ fn bearer_from_headers(headers: &HeaderMap) -> Option<String> {
         None
     }
 }
-

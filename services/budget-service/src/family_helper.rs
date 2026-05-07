@@ -1,8 +1,4 @@
-pub async fn is_family_member(
-    user_service_url: &str,
-    token: &str,
-    family_id: &str,
-) -> bool {
+pub async fn is_family_member(user_service_url: &str, token: &str, family_id: &str) -> bool {
     let url = format!("{}/api/v1/families/{}/members", user_service_url, family_id);
     let client = reqwest::Client::new();
     match client

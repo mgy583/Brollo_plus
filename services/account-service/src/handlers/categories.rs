@@ -1,4 +1,8 @@
-use crate::{auth::AuthUser, models::{Category, CategoryDto}, AppState};
+use crate::{
+    auth::AuthUser,
+    models::{Category, CategoryDto},
+    AppState,
+};
 use axum::{
     extract::{Extension, Path, Query, State},
     http::StatusCode,
@@ -54,13 +58,19 @@ pub async fn list_categories(
     let opts = FindOptions::builder()
         .sort(doc! { "order": 1, "created_at": 1 })
         .build();
-    let cursor = col.find(filter).with_options(opts).await
+    let cursor = col
+        .find(filter)
+        .with_options(opts)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let all: Vec<Category> = cursor.try_collect().await
+    let all: Vec<Category> = cursor
+        .try_collect()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut top: Vec<CategoryDto> = vec![];
-    let mut children_map: std::collections::HashMap<String, Vec<CategoryDto>> = std::collections::HashMap::new();
+    let mut children_map: std::collections::HashMap<String, Vec<CategoryDto>> =
+        std::collections::HashMap::new();
     for cat in all {
         let dto = CategoryDto::from_category(cat.clone());
         if cat.parent_id.is_none() {
@@ -70,12 +80,15 @@ pub async fn list_categories(
             children_map.entry(pid).or_default().push(dto);
         }
     }
-    let result: Vec<CategoryDto> = top.into_iter().map(|mut c| {
-        if let Some(children) = children_map.remove(&c.id) {
-            c.children = children;
-        }
-        c
-    }).collect();
+    let result: Vec<CategoryDto> = top
+        .into_iter()
+        .map(|mut c| {
+            if let Some(children) = children_map.remove(&c.id) {
+                c.children = children;
+            }
+            c
+        })
+        .collect();
 
     Ok(Json(json!({
         "success": true,
@@ -91,7 +104,10 @@ pub async fn create_category(
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Category>("categories");
     let now = DateTime::now();
-    let count = col.count_documents(doc! { "user_id": &auth.user_id }).await.unwrap_or(0);
+    let count = col
+        .count_documents(doc! { "user_id": &auth.user_id })
+        .await
+        .unwrap_or(0);
     let cat = Category {
         id: None,
         user_id: Some(auth.user_id.clone()),
@@ -107,10 +123,18 @@ pub async fn create_category(
         created_at: now,
         updated_at: now,
     };
-    let result = col.insert_one(&cat).await
+    let result = col
+        .insert_one(&cat)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let id = result.inserted_id.as_object_id().map(|o| o.to_hex()).unwrap_or_default();
-    Ok(Json(json!({ "success": true, "data": { "id": id }, "message": "分类创建成功" })))
+    let id = result
+        .inserted_id
+        .as_object_id()
+        .map(|o| o.to_hex())
+        .unwrap_or_default();
+    Ok(Json(
+        json!({ "success": true, "data": { "id": id }, "message": "分类创建成功" }),
+    ))
 }
 
 pub async fn update_category(
@@ -122,15 +146,27 @@ pub async fn update_category(
     let col = state.mongo.collection::<Category>("categories");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     let mut set_doc = doc! { "updated_at": DateTime::now() };
-    if let Some(n) = payload.name { set_doc.insert("name", n); }
-    if let Some(i) = payload.icon { set_doc.insert("icon", i); }
-    if let Some(c) = payload.color { set_doc.insert("color", c); }
-    if let Some(a) = payload.is_archived { set_doc.insert("is_archived", a); }
+    if let Some(n) = payload.name {
+        set_doc.insert("name", n);
+    }
+    if let Some(i) = payload.icon {
+        set_doc.insert("icon", i);
+    }
+    if let Some(c) = payload.color {
+        set_doc.insert("color", c);
+    }
+    if let Some(a) = payload.is_archived {
+        set_doc.insert("is_archived", a);
+    }
     col.update_one(
         doc! { "_id": oid, "user_id": &auth.user_id, "is_system": false },
         doc! { "$set": set_doc },
-    ).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({ "success": true, "data": {}, "message": "更新成功" })))
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(
+        json!({ "success": true, "data": {}, "message": "更新成功" }),
+    ))
 }
 
 pub async fn delete_category(
@@ -141,6 +177,9 @@ pub async fn delete_category(
     let col = state.mongo.collection::<Category>("categories");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     col.delete_one(doc! { "_id": oid, "user_id": &auth.user_id, "is_system": false })
-        .await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({ "success": true, "data": {}, "message": "已删除" })))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(
+        json!({ "success": true, "data": {}, "message": "已删除" }),
+    ))
 }

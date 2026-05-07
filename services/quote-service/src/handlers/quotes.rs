@@ -42,7 +42,9 @@ pub async fn get_rates(
 
     let mut rates = serde_json::Map::new();
     for target in targets {
-        if target == base { continue; }
+        if target == base {
+            continue;
+        }
         if let Some(rate) = db::get_rate(&state, base, target).await {
             rates.insert(target.to_string(), json!(rate));
         }
@@ -76,7 +78,8 @@ pub async fn get_rate_history(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let history: Vec<Value> = rows.into_iter()
+    let history: Vec<Value> = rows
+        .into_iter()
         .map(|(date, rate)| json!({ "date": date, "rate": rate }))
         .collect();
 

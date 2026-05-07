@@ -2,11 +2,7 @@ mod auth;
 mod db;
 mod handlers;
 
-use axum::{
-    middleware,
-    routing::get,
-    Router,
-};
+use axum::{middleware, routing::get, Router};
 use dotenvy::dotenv;
 use mongodb::{options::ClientOptions, Client};
 use redis::aio::ConnectionManager;
@@ -38,7 +34,8 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or(8005);
 
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "dev-secret-change-me".into());
-    let mongo_url = std::env::var("MONGO_URL").unwrap_or_else(|_| "mongodb://localhost:27017".into());
+    let mongo_url =
+        std::env::var("MONGO_URL").unwrap_or_else(|_| "mongodb://localhost:27017".into());
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
 
     let mongo_opts = ClientOptions::parse(&mongo_url).await?;

@@ -41,9 +41,11 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or(8002);
 
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "dev-secret-change-me".into());
-    let mongo_url = std::env::var("MONGO_URL").unwrap_or_else(|_| "mongodb://localhost:27017".into());
+    let mongo_url =
+        std::env::var("MONGO_URL").unwrap_or_else(|_| "mongodb://localhost:27017".into());
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
-    let user_service_url = std::env::var("USER_SERVICE_URL").unwrap_or_else(|_| "http://user-service:8001".into());
+    let user_service_url =
+        std::env::var("USER_SERVICE_URL").unwrap_or_else(|_| "http://user-service:8001".into());
 
     let mongo_opts = ClientOptions::parse(&mongo_url).await?;
     let mongo_client = Client::with_options(mongo_opts)?;
@@ -64,11 +66,29 @@ async fn main() -> anyhow::Result<()> {
     let auth_mw = middleware::from_fn_with_state(state.clone(), auth::require_auth);
 
     let api = Router::new()
-        .route("/accounts", get(handlers::accounts::list_accounts).post(handlers::accounts::create_account))
-        .route("/accounts/family/:family_id", get(handlers::accounts::list_family_accounts))
-        .route("/accounts/:id", get(handlers::accounts::get_account).patch(handlers::accounts::update_account).delete(handlers::accounts::delete_account))
-        .route("/categories", get(handlers::categories::list_categories).post(handlers::categories::create_category))
-        .route("/categories/:id", patch(handlers::categories::update_category).delete(handlers::categories::delete_category))
+        .route(
+            "/accounts",
+            get(handlers::accounts::list_accounts).post(handlers::accounts::create_account),
+        )
+        .route(
+            "/accounts/family/:family_id",
+            get(handlers::accounts::list_family_accounts),
+        )
+        .route(
+            "/accounts/:id",
+            get(handlers::accounts::get_account)
+                .patch(handlers::accounts::update_account)
+                .delete(handlers::accounts::delete_account),
+        )
+        .route(
+            "/categories",
+            get(handlers::categories::list_categories).post(handlers::categories::create_category),
+        )
+        .route(
+            "/categories/:id",
+            patch(handlers::categories::update_category)
+                .delete(handlers::categories::delete_category),
+        )
         .layer(auth_mw)
         .with_state(state.clone());
 

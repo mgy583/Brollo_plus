@@ -1,4 +1,9 @@
-use crate::{auth::AuthUser, family_helper, models::{Account, AccountDto}, AppState};
+use crate::{
+    auth::AuthUser,
+    family_helper,
+    models::{Account, AccountDto},
+    AppState,
+};
 use axum::{
     extract::{Extension, Path, Query, State},
     http::StatusCode,
@@ -10,7 +15,6 @@ use mongodb::options::FindOptions;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::str::FromStr;
-
 
 #[derive(Deserialize)]
 pub struct ListAccountsQuery {
@@ -73,14 +77,27 @@ pub async fn list_accounts(
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Account>("accounts");
     let mut filter = doc! { "user_id": &auth.user_id, "visibility": { "$ne": "family" } };
-    if let Some(s) = &q.status { filter.insert("status", s); }
-    if let Some(t) = &q.account_type { filter.insert("type", t); }
-    if let Some(c) = &q.currency { filter.insert("currency", c); }
+    if let Some(s) = &q.status {
+        filter.insert("status", s);
+    }
+    if let Some(t) = &q.account_type {
+        filter.insert("type", t);
+    }
+    if let Some(c) = &q.currency {
+        filter.insert("currency", c);
+    }
 
-    let opts = FindOptions::builder().sort(doc! { "created_at": -1 }).build();
-    let cursor = col.find(filter).with_options(opts).await
+    let opts = FindOptions::builder()
+        .sort(doc! { "created_at": -1 })
+        .build();
+    let cursor = col
+        .find(filter)
+        .with_options(opts)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let accounts: Vec<Account> = cursor.try_collect().await
+    let accounts: Vec<Account> = cursor
+        .try_collect()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let sum = summary(&accounts);
@@ -99,7 +116,8 @@ pub async fn list_family_accounts(
     Path(family_id): Path<String>,
 ) -> Result<Json<Value>, StatusCode> {
     // 校验成员身份
-    if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, &family_id).await {
+    if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, &family_id).await
+    {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -109,10 +127,17 @@ pub async fn list_family_accounts(
         "visibility": "family",
         "status": { "$ne": "deleted" }
     };
-    let opts = FindOptions::builder().sort(doc! { "created_at": -1 }).build();
-    let cursor = col.find(filter).with_options(opts).await
+    let opts = FindOptions::builder()
+        .sort(doc! { "created_at": -1 })
+        .build();
+    let cursor = col
+        .find(filter)
+        .with_options(opts)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let accounts: Vec<Account> = cursor.try_collect().await
+    let accounts: Vec<Account> = cursor
+        .try_collect()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let sum = summary(&accounts);
@@ -130,12 +155,16 @@ pub async fn create_account(
     Extension(auth): Extension<AuthUser>,
     Json(payload): Json<CreateAccountPayload>,
 ) -> Result<Json<Value>, StatusCode> {
-    let visibility = payload.visibility.clone().unwrap_or_else(|| "private".to_string());
+    let visibility = payload
+        .visibility
+        .clone()
+        .unwrap_or_else(|| "private".to_string());
 
     // 家庭账户：校验成员身份
     if let Some(fid) = &payload.family_id {
         if visibility == "family" {
-            if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, fid).await {
+            if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, fid).await
+            {
                 return Err(StatusCode::FORBIDDEN);
             }
         }
@@ -160,10 +189,15 @@ pub async fn create_account(
         created_at: now,
         updated_at: now,
     };
-    let result = col.insert_one(&account).await
+    let result = col
+        .insert_one(&account)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let inserted_id = result.inserted_id.as_object_id()
-        .map(|o| o.to_hex()).unwrap_or_default();
+    let inserted_id = result
+        .inserted_id
+        .as_object_id()
+        .map(|o| o.to_hex())
+        .unwrap_or_default();
     Ok(Json(json!({
         "success": true,
         "data": { "id": inserted_id },
@@ -180,7 +214,9 @@ pub async fn get_account(
     let col = state.mongo.collection::<Account>("accounts");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     // 先按 owner 查，找不到再看是否是家庭成员账户
-    let account = col.find_one(doc! { "_id": oid }).await
+    let account = col
+        .find_one(doc! { "_id": oid })
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
@@ -188,7 +224,9 @@ pub async fn get_account(
     if !is_owner {
         if account.visibility.as_deref() == Some("family") {
             if let Some(fid) = &account.family_id {
-                if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, fid).await {
+                if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, fid)
+                    .await
+                {
                     return Err(StatusCode::FORBIDDEN);
                 }
             } else {
@@ -199,7 +237,9 @@ pub async fn get_account(
         }
     }
 
-    Ok(Json(json!({ "success": true, "data": AccountDto::from(account), "message": "ok" })))
+    Ok(Json(
+        json!({ "success": true, "data": AccountDto::from(account), "message": "ok" }),
+    ))
 }
 
 /// PATCH /api/v1/accounts/:id
@@ -212,24 +252,42 @@ pub async fn update_account(
     let col = state.mongo.collection::<Account>("accounts");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     // 只有账户 owner 可以修改
-    let existing = col.find_one(doc! { "_id": oid, "user_id": &auth.user_id }).await
+    let existing = col
+        .find_one(doc! { "_id": oid, "user_id": &auth.user_id })
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     drop(existing);
 
     let mut set_doc = doc! { "updated_at": DateTime::now() };
-    if let Some(n) = payload.name { set_doc.insert("name", n); }
-    if let Some(i) = payload.icon { set_doc.insert("icon", i); }
-    if let Some(c) = payload.color { set_doc.insert("color", c); }
-    if let Some(d) = payload.description { set_doc.insert("description", d); }
-    if let Some(s) = payload.status { set_doc.insert("status", s); }
-    if let Some(v) = payload.visibility { set_doc.insert("visibility", v); }
+    if let Some(n) = payload.name {
+        set_doc.insert("name", n);
+    }
+    if let Some(i) = payload.icon {
+        set_doc.insert("icon", i);
+    }
+    if let Some(c) = payload.color {
+        set_doc.insert("color", c);
+    }
+    if let Some(d) = payload.description {
+        set_doc.insert("description", d);
+    }
+    if let Some(s) = payload.status {
+        set_doc.insert("status", s);
+    }
+    if let Some(v) = payload.visibility {
+        set_doc.insert("visibility", v);
+    }
 
     col.update_one(
         doc! { "_id": oid, "user_id": &auth.user_id },
         doc! { "$set": set_doc },
-    ).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({ "success": true, "data": {}, "message": "更新成功" })))
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(
+        json!({ "success": true, "data": {}, "message": "更新成功" }),
+    ))
 }
 
 /// DELETE /api/v1/accounts/:id — 只有 owner 可删除
@@ -241,6 +299,9 @@ pub async fn delete_account(
     let col = state.mongo.collection::<Account>("accounts");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
     col.delete_one(doc! { "_id": oid, "user_id": &auth.user_id })
-        .await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({ "success": true, "data": {}, "message": "账户已删除" })))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(
+        json!({ "success": true, "data": {}, "message": "账户已删除" }),
+    ))
 }

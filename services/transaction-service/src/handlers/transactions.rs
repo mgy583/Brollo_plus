@@ -1,4 +1,9 @@
-use crate::{auth::AuthUser, family_helper, models::{Transaction, TransactionDto}, AppState};
+use crate::{
+    auth::AuthUser,
+    family_helper,
+    models::{Transaction, TransactionDto},
+    AppState,
+};
 use axum::{
     extract::{Extension, Path, Query, State},
     http::StatusCode,
@@ -7,9 +12,14 @@ use axum::{
 use bson::{doc, oid::ObjectId, DateTime};
 use futures::TryStreamExt;
 use mongodb::options::FindOptions;
+use redis::AsyncCommands;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::str::FromStr;
+
+const DEDUP_AMOUNT_TOLERANCE: f64 = 0.01;
+const DEDUP_TIME_WINDOW_MINUTES: i64 = 5;
+const DEDUP_DESCRIPTION_THRESHOLD: f64 = 0.80;
 
 #[derive(Deserialize)]
 pub struct ListQuery {
@@ -65,9 +75,14 @@ async fn paginate(
         .skip(skip as u64)
         .limit(page_size)
         .build();
-    let cursor = col.find(filter).with_options(opts).await
+    let cursor = col
+        .find(filter)
+        .with_options(opts)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let txs: Vec<Transaction> = cursor.try_collect().await
+    let txs: Vec<Transaction> = cursor
+        .try_collect()
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let dtos: Vec<TransactionDto> = txs.into_iter().map(TransactionDto::from).collect();
     let total_pages = ((total + page_size - 1) / page_size).max(1);
@@ -83,16 +98,199 @@ async fn paginate(
 }
 
 fn apply_list_filters(filter: &mut bson::Document, q: &ListQuery) {
-    if let Some(t) = &q.tx_type { filter.insert("type", t); }
-    if let Some(c) = &q.category_id { filter.insert("category_id", c); }
-    if let Some(a) = &q.account_id { filter.insert("account_id", a); }
+    if let Some(t) = &q.tx_type {
+        filter.insert("type", t);
+    }
+    if let Some(c) = &q.category_id {
+        filter.insert("category_id", c);
+    }
+    if let Some(a) = &q.account_id {
+        filter.insert("account_id", a);
+    }
     let mut date_filter = doc! {};
-    if let Some(s) = &q.start_date { date_filter.insert("$gte", s); }
-    if let Some(e) = &q.end_date { date_filter.insert("$lte", e); }
-    if !date_filter.is_empty() { filter.insert("transaction_date", date_filter); }
+    if let Some(s) = &q.start_date {
+        date_filter.insert("$gte", s);
+    }
+    if let Some(e) = &q.end_date {
+        date_filter.insert("$lte", e);
+    }
+    if !date_filter.is_empty() {
+        filter.insert("transaction_date", date_filter);
+    }
     if let Some(kw) = &q.search {
         filter.insert("description", doc! { "$regex": kw, "$options": "i" });
     }
+}
+
+fn parse_transaction_timestamp(value: &str) -> Option<time::OffsetDateTime> {
+    time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+        .ok()
+        .or_else(|| {
+            time::PrimitiveDateTime::parse(
+                value,
+                &time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second]"),
+            )
+            .ok()
+            .map(|dt| dt.assume_utc())
+        })
+        .or_else(|| {
+            time::Date::parse(
+                value,
+                &time::macros::format_description!("[year]-[month]-[day]"),
+            )
+            .ok()
+            .map(|date| date.midnight().assume_utc())
+        })
+}
+
+fn format_transaction_timestamp(value: time::OffsetDateTime) -> String {
+    value
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| value.to_string())
+}
+
+fn levenshtein_distance(left: &str, right: &str) -> usize {
+    if left == right {
+        return 0;
+    }
+    if left.is_empty() {
+        return right.chars().count();
+    }
+    if right.is_empty() {
+        return left.chars().count();
+    }
+
+    let right_chars: Vec<char> = right.chars().collect();
+    let mut costs: Vec<usize> = (0..=right_chars.len()).collect();
+
+    for (i, lc) in left.chars().enumerate() {
+        let mut previous = costs[0];
+        costs[0] = i + 1;
+        for (j, rc) in right_chars.iter().enumerate() {
+            let temp = costs[j + 1];
+            costs[j + 1] = if lc == *rc {
+                previous
+            } else {
+                1 + previous.min(costs[j]).min(costs[j + 1])
+            };
+            previous = temp;
+        }
+    }
+
+    costs[right_chars.len()]
+}
+
+fn description_similarity(left: Option<&str>, right: Option<&str>) -> f64 {
+    let left = left.unwrap_or("").trim().to_lowercase();
+    let right = right.unwrap_or("").trim().to_lowercase();
+    let max_len = left.chars().count().max(right.chars().count());
+    if max_len == 0 {
+        return 1.0;
+    }
+    1.0 - (levenshtein_distance(&left, &right) as f64 / max_len as f64)
+}
+
+async fn find_duplicate_transaction(
+    col: &mongodb::Collection<Transaction>,
+    auth: &AuthUser,
+    payload: &CreatePayload,
+) -> Result<Option<Transaction>, StatusCode> {
+    let amount_min = payload.amount * (1.0 - DEDUP_AMOUNT_TOLERANCE);
+    let amount_max = payload.amount * (1.0 + DEDUP_AMOUNT_TOLERANCE);
+    let mut filter = doc! {
+        "user_id": &auth.user_id,
+        "type": &payload.tx_type,
+        "amount": { "$gte": amount_min, "$lte": amount_max },
+        "status": { "$ne": "deleted" },
+    };
+
+    if let Some(fid) = &payload.family_id {
+        filter.insert("family_id", fid);
+    } else {
+        filter.insert("account_id", &payload.account_id);
+    }
+
+    if let Some(tx_time) = parse_transaction_timestamp(&payload.transaction_date) {
+        let start = tx_time - time::Duration::minutes(DEDUP_TIME_WINDOW_MINUTES);
+        let end = tx_time + time::Duration::minutes(DEDUP_TIME_WINDOW_MINUTES);
+        filter.insert(
+            "transaction_date",
+            doc! {
+                "$gte": format_transaction_timestamp(start),
+                "$lte": format_transaction_timestamp(end),
+            },
+        );
+    } else {
+        filter.insert("transaction_date", &payload.transaction_date);
+    }
+
+    let cursor = col
+        .find(filter)
+        .limit(20)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let candidates: Vec<Transaction> = cursor
+        .try_collect()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(candidates.into_iter().find(|tx| {
+        description_similarity(payload.description.as_deref(), tx.description.as_deref())
+            >= DEDUP_DESCRIPTION_THRESHOLD
+    }))
+}
+
+fn balance_delta(tx_type: &str, amount: f64, is_source: bool) -> f64 {
+    match (tx_type, is_source) {
+        ("expense", true) => -amount,
+        ("income", true) => amount,
+        ("transfer", true) => -amount,
+        ("transfer", false) => amount,
+        _ => 0.0,
+    }
+}
+
+async fn invalidate_transaction_caches(state: &AppState, user_id: &str) {
+    let mut redis = state.redis.clone();
+    let _ = redis
+        .del::<_, ()>(format!("transactions:list:{}", user_id))
+        .await;
+    let _ = redis.del::<_, ()>(format!("reports:*:{}*", user_id)).await;
+}
+
+async fn apply_account_delta(
+    state: &AppState,
+    auth: &AuthUser,
+    account_id: &str,
+    family_id: &Option<String>,
+    delta: f64,
+    now: DateTime,
+) -> Result<(), StatusCode> {
+    if delta == 0.0 {
+        return Ok(());
+    }
+
+    let oid = ObjectId::from_str(account_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let accounts = state.mongo.collection::<bson::Document>("accounts");
+    let acct_filter = if family_id.is_some() {
+        doc! { "_id": oid, "status": { "$ne": "deleted" } }
+    } else {
+        doc! { "_id": oid, "user_id": &auth.user_id, "status": { "$ne": "deleted" } }
+    };
+
+    let result = accounts
+        .update_one(
+            acct_filter,
+            doc! { "$inc": { "current_balance": delta }, "$set": { "updated_at": now } },
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if result.matched_count == 0 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    Ok(())
 }
 
 // GET /api/v1/transactions
@@ -107,7 +305,9 @@ pub async fn list_transactions(
     let mut filter = doc! { "user_id": &auth.user_id, "status": { "$ne": "deleted" } };
     apply_list_filters(&mut filter, &q);
     let data = paginate(&col, filter, page, page_size).await?;
-    Ok(Json(json!({ "success": true, "data": data, "message": "ok" })))
+    Ok(Json(
+        json!({ "success": true, "data": data, "message": "ok" }),
+    ))
 }
 
 // GET /api/v1/transactions/family/:family_id
@@ -117,7 +317,8 @@ pub async fn list_family_transactions(
     Path(family_id): Path<String>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, &family_id).await {
+    if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, &family_id).await
+    {
         return Err(StatusCode::FORBIDDEN);
     }
     let col = state.mongo.collection::<Transaction>("transactions");
@@ -126,7 +327,9 @@ pub async fn list_family_transactions(
     let mut filter = doc! { "family_id": &family_id, "status": { "$ne": "deleted" } };
     apply_list_filters(&mut filter, &q);
     let data = paginate(&col, filter, page, page_size).await?;
-    Ok(Json(json!({ "success": true, "data": data, "message": "ok" })))
+    Ok(Json(
+        json!({ "success": true, "data": data, "message": "ok" }),
+    ))
 }
 
 // POST /api/v1/transactions
@@ -142,9 +345,36 @@ pub async fn create_transaction(
     }
     let col = state.mongo.collection::<Transaction>("transactions");
     let now = DateTime::now();
-    let hash_input = format!("{}{}{}{}",
-        auth.user_id, payload.amount, payload.transaction_date,
-        payload.description.as_deref().unwrap_or(""));
+
+    if payload.amount <= 0.0 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if !matches!(payload.tx_type.as_str(), "income" | "expense" | "transfer") {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if payload.tx_type == "transfer" && payload.to_account_id.as_deref().unwrap_or("").is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if let Some(existing) = find_duplicate_transaction(&col, &auth, &payload).await? {
+        return Ok(Json(json!({
+            "success": true,
+            "data": {
+                "id": existing.id.map(|o| o.to_hex()).unwrap_or_default(),
+                "duplicate": true
+            },
+            "message": "检测到重复交易，已跳过去重写入"
+        })));
+    }
+
+    let hash_input = format!(
+        "{}{}{}{}{}",
+        auth.user_id,
+        payload.tx_type,
+        payload.amount,
+        payload.transaction_date,
+        payload.description.as_deref().unwrap_or("")
+    );
     let dedup_hash = format!("{:x}", md5::compute(hash_input.as_bytes()));
     let recorder_id = payload.family_id.as_ref().map(|_| auth.user_id.clone());
     let tx = Transaction {
@@ -168,38 +398,39 @@ pub async fn create_transaction(
         created_at: now,
         updated_at: now,
     };
-    let result = col.insert_one(&tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let id = result.inserted_id.as_object_id().map(|o| o.to_hex()).unwrap_or_default();
+    apply_account_delta(
+        &state,
+        &auth,
+        &payload.account_id,
+        &payload.family_id,
+        balance_delta(&payload.tx_type, payload.amount, true),
+        now,
+    )
+    .await?;
 
-    let accounts = state.mongo.collection::<bson::Document>("accounts");
-    let delta = match payload.tx_type.as_str() {
-        "expense" => -payload.amount,
-        "income" => payload.amount,
-        _ => 0.0,
-    };
-    if delta != 0.0 {
-        if let Ok(oid) = ObjectId::from_str(&payload.account_id) {
-            let acct_filter = if payload.family_id.is_some() {
-                doc! { "_id": oid }
-            } else {
-                doc! { "_id": oid, "user_id": &auth.user_id }
-            };
-            let _ = accounts.update_one(
-                acct_filter,
-                doc! { "$inc": { "current_balance": delta }, "$set": { "updated_at": now } },
-            ).await;
-        }
-    }
     if payload.tx_type == "transfer" {
         if let Some(to_id) = &payload.to_account_id {
-            if let Ok(oid) = ObjectId::from_str(to_id) {
-                let _ = accounts.update_one(
-                    doc! { "_id": oid },
-                    doc! { "$inc": { "current_balance": payload.amount }, "$set": { "updated_at": now } },
-                ).await;
-            }
+            apply_account_delta(
+                &state,
+                &auth,
+                to_id,
+                &payload.family_id,
+                balance_delta(&payload.tx_type, payload.amount, false),
+                now,
+            )
+            .await?;
         }
     }
+
+    let result = col
+        .insert_one(&tx)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let id = result
+        .inserted_id
+        .as_object_id()
+        .map(|o| o.to_hex())
+        .unwrap_or_default();
     let event = serde_json::json!({
         "id": &id, "user_id": &auth.user_id, "family_id": &payload.family_id,
         "recorder_id": &auth.user_id, "type": &payload.tx_type,
@@ -207,8 +438,16 @@ pub async fn create_transaction(
         "category_id": &payload.category_id, "account_id": &payload.account_id,
         "transaction_date": &payload.transaction_date
     });
-    let _ = publish_event(&state.rabbitmq_url, "transaction.created", event.to_string()).await;
-    Ok(Json(json!({ "success": true, "data": { "id": id }, "message": "交易创建成功" })))
+    let _ = publish_event(
+        &state.rabbitmq_url,
+        "transaction.created",
+        event.to_string(),
+    )
+    .await;
+    invalidate_transaction_caches(&state, &auth.user_id).await;
+    Ok(Json(
+        json!({ "success": true, "data": { "id": id, "duplicate": false }, "message": "交易创建成功" }),
+    ))
 }
 
 // GET /api/v1/transactions/:id
@@ -219,19 +458,24 @@ pub async fn get_transaction(
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Transaction>("transactions");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let tx = col.find_one(doc! { "_id": oid }).await
+    let tx = col
+        .find_one(doc! { "_id": oid })
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     if tx.user_id != auth.user_id {
         if let Some(fid) = &tx.family_id {
-            if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, fid).await {
+            if !family_helper::is_family_member(&state.user_service_url, &auth.raw_token, fid).await
+            {
                 return Err(StatusCode::FORBIDDEN);
             }
         } else {
             return Err(StatusCode::FORBIDDEN);
         }
     }
-    Ok(Json(json!({ "success": true, "data": TransactionDto::from(tx), "message": "ok" })))
+    Ok(Json(
+        json!({ "success": true, "data": TransactionDto::from(tx), "message": "ok" }),
+    ))
 }
 
 // PATCH /api/v1/transactions/:id
@@ -243,7 +487,9 @@ pub async fn update_transaction(
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Transaction>("transactions");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let tx = col.find_one(doc! { "_id": oid }).await
+    let tx = col
+        .find_one(doc! { "_id": oid })
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     // 只有原始记录人可修改
@@ -251,19 +497,35 @@ pub async fn update_transaction(
         return Err(StatusCode::FORBIDDEN);
     }
     let mut set_doc = doc! { "updated_at": DateTime::now() };
-    if let Some(a) = payload.amount { set_doc.insert("amount", a); }
-    if let Some(d) = payload.description { set_doc.insert("description", d); }
-    if let Some(p) = payload.payee { set_doc.insert("payee", p); }
-    if let Some(c) = payload.category_id { set_doc.insert("category_id", c); }
-    if let Some(dt) = payload.transaction_date { set_doc.insert("transaction_date", dt); }
-    if let Some(n) = payload.notes { set_doc.insert("notes", n); }
+    if let Some(a) = payload.amount {
+        set_doc.insert("amount", a);
+    }
+    if let Some(d) = payload.description {
+        set_doc.insert("description", d);
+    }
+    if let Some(p) = payload.payee {
+        set_doc.insert("payee", p);
+    }
+    if let Some(c) = payload.category_id {
+        set_doc.insert("category_id", c);
+    }
+    if let Some(dt) = payload.transaction_date {
+        set_doc.insert("transaction_date", dt);
+    }
+    if let Some(n) = payload.notes {
+        set_doc.insert("notes", n);
+    }
     if let Some(tags) = payload.tags {
         let bson_tags: Vec<bson::Bson> = tags.into_iter().map(bson::Bson::String).collect();
         set_doc.insert("tags", bson_tags);
     }
-    col.update_one(doc! { "_id": oid }, doc! { "$set": set_doc }).await
+    col.update_one(doc! { "_id": oid }, doc! { "$set": set_doc })
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({ "success": true, "data": {}, "message": "更新成功" })))
+    invalidate_transaction_caches(&state, &auth.user_id).await;
+    Ok(Json(
+        json!({ "success": true, "data": {}, "message": "更新成功" }),
+    ))
 }
 
 // DELETE /api/v1/transactions/:id
@@ -274,7 +536,9 @@ pub async fn delete_transaction(
 ) -> Result<Json<Value>, StatusCode> {
     let col = state.mongo.collection::<Transaction>("transactions");
     let oid = ObjectId::from_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let tx = col.find_one(doc! { "_id": oid }).await
+    let tx = col
+        .find_one(doc! { "_id": oid })
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     if tx.user_id != auth.user_id {
@@ -283,8 +547,13 @@ pub async fn delete_transaction(
     col.update_one(
         doc! { "_id": oid },
         doc! { "$set": { "status": "deleted", "updated_at": DateTime::now() } },
-    ).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({ "success": true, "data": {}, "message": "已删除" })))
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    invalidate_transaction_caches(&state, &auth.user_id).await;
+    Ok(Json(
+        json!({ "success": true, "data": {}, "message": "已删除" }),
+    ))
 }
 
 async fn publish_event(rabbitmq_url: &str, queue: &str, body: String) -> anyhow::Result<()> {
@@ -295,8 +564,24 @@ async fn publish_event(rabbitmq_url: &str, queue: &str, body: String) -> anyhow:
     };
     let conn = Connection::connect(rabbitmq_url, ConnectionProperties::default()).await?;
     let channel = conn.create_channel().await?;
-    channel.queue_declare(queue, QueueDeclareOptions { durable: true, ..Default::default() }, FieldTable::default()).await?;
-    channel.basic_publish("", queue, BasicPublishOptions::default(), body.as_bytes(),
-        BasicProperties::default().with_content_type("application/json".into())).await?;
+    channel
+        .queue_declare(
+            queue,
+            QueueDeclareOptions {
+                durable: true,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await?;
+    channel
+        .basic_publish(
+            "",
+            queue,
+            BasicPublishOptions::default(),
+            body.as_bytes(),
+            BasicProperties::default().with_content_type("application/json".into()),
+        )
+        .await?;
     Ok(())
 }
