@@ -1,0 +1,11 @@
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM nginx:1.24-alpine
+COPY infra/nginx/nginx.prod.conf /etc/nginx/nginx.conf
+COPY --from=frontend-builder /frontend/dist /usr/share/nginx/html

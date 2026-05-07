@@ -134,3 +134,54 @@ docker compose -f docker-compose.dev.yml down
 # 停止并清除数据卷（慎用）
 docker compose -f docker-compose.dev.yml down -v
 ```
+
+## 服务器一键部署（生产）
+
+目标：前后端都在 Docker 内，启动后直接访问，不需要再单独跑 `npm run dev`。
+
+### 1) 准备环境变量
+
+```bash
+cp .env.example .env
+```
+
+至少修改以下变量：
+
+- `JWT_SECRET`（务必改成强随机字符串）
+- `POSTGRES_PASSWORD`（务必改）
+
+可选：
+
+- `APP_PORT`（默认 `80`）
+- `RABBITMQ_MGMT_PORT`（默认 `15672`）
+
+### 2) 启动生产栈
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+### 3) 验证
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+curl -i http://127.0.0.1:${APP_PORT:-80}/health
+```
+
+### 4) 访问
+
+- 应用入口：`http://<你的服务器IP>:${APP_PORT:-80}`
+- RabbitMQ 管理台：`http://<你的服务器IP>:${RABBITMQ_MGMT_PORT:-15672}`
+
+### 5) 常用维护命令
+
+```bash
+# 查看日志
+docker compose -f docker-compose.prod.yml logs -f gateway
+
+# 重启
+docker compose -f docker-compose.prod.yml restart
+
+# 停止
+docker compose -f docker-compose.prod.yml down
+```
