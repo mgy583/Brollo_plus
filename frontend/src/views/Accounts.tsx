@@ -105,7 +105,6 @@ export default function Accounts() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>账户管理</Typography.Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建账户</Button>
       </div>
 

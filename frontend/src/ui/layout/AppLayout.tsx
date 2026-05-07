@@ -45,15 +45,12 @@ export function AppLayout() {
   };
 
   return (
-    <Layout style={{ minHeight: "100%" }}>
+    <Layout className="app-shell">
       <Sider width={232} breakpoint="lg" collapsedWidth={0}>
         <div style={{ padding: "24px 20px 18px" }}>
           <Typography.Title level={4} style={{ color: "#fff", margin: 0, letterSpacing: 0 }}>
             Brollo+
           </Typography.Title>
-          <Typography.Text style={{ color: "rgba(255,255,255,0.46)", fontSize: 12 }}>
-            Household finance
-          </Typography.Text>
         </div>
         <Menu
           mode="inline"
@@ -65,15 +62,12 @@ export function AppLayout() {
         />
       </Sider>
       <Layout>
-        <Header style={{ height: 64, lineHeight: "64px", padding: "0 28px", position: "sticky", top: 0, zIndex: 5 }}>
+        <Header className="app-header">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", height: "100%" }}>
             <div>
               <Typography.Title level={4} style={{ margin: 0, lineHeight: 1.2 }}>
                 {activeItem?.label ?? "仪表盘"}
               </Typography.Title>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                简洁、清晰地管理家庭财务
-              </Typography.Text>
             </div>
             <Dropdown
               menu={{
@@ -89,8 +83,8 @@ export function AppLayout() {
             </Dropdown>
           </div>
         </Header>
-        <Content style={{ padding: 24 }}>
-          <div style={{ maxWidth: 1320, margin: "0 auto" }}>
+        <Content className="app-content">
+          <div className="app-content-inner">
             <Outlet />
           </div>
         </Content>

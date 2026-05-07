@@ -127,6 +127,28 @@ def create_account(token, name, account_type, initial_balance, family_id=None):
     return data["data"]["id"]
 
 
+def create_personal_budget(token, account_id, category_id, username):
+    today = datetime.now(timezone.utc).date()
+    start = today.replace(day=1).isoformat()
+    end = (today + timedelta(days=28)).isoformat()
+    payload = {
+        "name": f"{username} Personal Budget",
+        "type": "monthly",
+        "start_date": start,
+        "end_date": end,
+        "amount": 6000,
+        "currency": "CNY",
+        "category_ids": [category_id],
+        "account_ids": [account_id],
+        "scope": "personal",
+        "alert_threshold": 0.7,
+    }
+    status, data = api_request("POST", "/budgets", token=token, payload=payload)
+    if status not in (200, 201):
+        raise RuntimeError(f"create personal budget failed: {status} {data}")
+    return data["data"]["id"]
+
+
 def create_budget(token, family_id, account_ids, category_ids):
     today = datetime.now(timezone.utc).date()
     start = today.replace(day=1).isoformat()
@@ -148,6 +170,45 @@ def create_budget(token, family_id, account_ids, category_ids):
     if status not in (200, 201):
         raise RuntimeError(f"create budget failed: {status} {data}")
     return data["data"]["id"]
+
+
+def create_personal_transactions(token, account_id, expense_cat, income_cat, username):
+    now = datetime.now(timezone.utc)
+    tx_ids = []
+    for i in range(2):
+        dt = (now - timedelta(days=20 - i * 10)).replace(hour=10, minute=0, second=0, microsecond=0)
+        payload = {
+            "type": "income",
+            "amount": 3500 + i * 500,
+            "currency": "CNY",
+            "account_id": account_id,
+            "category_id": income_cat,
+            "description": f"{username} side income #{i+1}",
+            "payee": "Freelance",
+            "transaction_date": dt.isoformat().replace("+00:00", "Z"),
+            "tags": ["personal", "demo"],
+        }
+        status, data = api_request("POST", "/transactions", token=token, payload=payload)
+        if status in (200, 201):
+            tx_ids.append(data["data"]["id"])
+
+    for i in range(5):
+        dt = (now - timedelta(days=i)).replace(hour=19, minute=20, second=0, microsecond=0)
+        payload = {
+            "type": "expense",
+            "amount": float(random.randint(25, 260)),
+            "currency": "CNY",
+            "account_id": account_id,
+            "category_id": expense_cat,
+            "description": f"{username} personal expense #{i+1}",
+            "payee": "Local Shop",
+            "transaction_date": dt.isoformat().replace("+00:00", "Z"),
+            "tags": ["personal", "demo"],
+        }
+        status, data = api_request("POST", "/transactions", token=token, payload=payload)
+        if status in (200, 201):
+            tx_ids.append(data["data"]["id"])
+    return tx_ids
 
 
 def create_transactions(token, family_id, cash_account_id, card_account_id, expense_cat, income_cat):
@@ -226,15 +287,33 @@ def main():
     invite_code = family["invite_code"]
 
     seeded_users = [owner_user["username"]]
+    personal_stats = {}
     for u in DEMO_USERS:
         token, user = register_or_login(u["username"], u["email"], DEMO_PASSWORD, u["full_name"])
         ensure_member_join(token, invite_code, u["full_name"].split()[0])
         seeded_users.append(user["username"])
 
+        p_expense_cat, p_income_cat = pick_categories(token)
+        personal_account_id = create_account(token, f"{u['full_name']} Wallet", "cash", random.randint(1200, 5000))
+        p_tx = create_personal_transactions(token, personal_account_id, p_expense_cat, p_income_cat, u["username"])
+        p_budget_id = create_personal_budget(token, personal_account_id, p_expense_cat, u["username"])
+        personal_stats[u["username"]] = {
+            "personal_account_id": personal_account_id,
+            "personal_transactions_created": len(p_tx),
+            "personal_budget_id": p_budget_id,
+        }
+
     expense_cat, income_cat = pick_categories(owner_token)
     family_cash = create_account(owner_token, "Family Cash", "cash", 25000, family_id=family_id)
     family_card = create_account(owner_token, "Family Card", "credit_card", 0, family_id=family_id)
-    create_account(owner_token, "Owner Wallet", "cash", 1800)
+    owner_wallet = create_account(owner_token, "Owner Wallet", "cash", 1800)
+    owner_p_tx = create_personal_transactions(owner_token, owner_wallet, expense_cat, income_cat, owner_user["username"])
+    owner_p_budget = create_personal_budget(owner_token, owner_wallet, expense_cat, owner_user["username"])
+    personal_stats[owner_user["username"]] = {
+        "personal_account_id": owner_wallet,
+        "personal_transactions_created": len(owner_p_tx),
+        "personal_budget_id": owner_p_budget,
+    }
 
     tx_ids = create_transactions(
         owner_token,
@@ -254,7 +333,8 @@ def main():
         "seeded_users": seeded_users,
         "accounts_created": [family_cash, family_card],
         "transactions_created": len(tx_ids),
-        "budget_id": budget_id
+        "budget_id": budget_id,
+        "personal_stats": personal_stats
     }, ensure_ascii=False, indent=2))
 
 

@@ -85,7 +85,6 @@ export default function Reports() {
 
   return (
     <div>
-      <Typography.Title level={3}>统计报表</Typography.Title>
 
       <Card style={{ marginBottom: 16 }}>
         <Space wrap>

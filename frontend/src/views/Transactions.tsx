@@ -128,7 +128,6 @@ export default function Transactions() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>交易记录</Typography.Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={openModal}>新建交易</Button>
       </div>
 

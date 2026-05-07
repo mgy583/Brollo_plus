@@ -44,6 +44,28 @@ body {
   background: var(--app-bg);
 }
 
+.app-shell {
+  min-height: 100%;
+}
+
+.app-header {
+  height: 68px !important;
+  line-height: 68px !important;
+  padding: 0 28px !important;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.app-content {
+  padding: 24px;
+}
+
+.app-content-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
 .ant-card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -139,7 +161,7 @@ body {
 
 .ant-menu-dark .ant-menu-item {
   width: auto;
-  margin: 4px 10px;
+  margin: 4px 12px;
   border-radius: 7px;
   color: rgba(255, 255, 255, 0.68);
 }
@@ -217,6 +239,16 @@ h4.ant-typography {
 
 .ant-spin-dot-item {
   background: var(--primary) !important;
+}
+
+@media (max-width: 992px) {
+  .app-header {
+    padding: 0 16px !important;
+  }
+
+  .app-content {
+    padding: 16px;
+  }
 }
 
 .sketch-progress-wrap {

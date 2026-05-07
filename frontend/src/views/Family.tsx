@@ -273,7 +273,6 @@ export default function FamilyPage() {
   if (loading) return <div style={{display:"grid",placeItems:"center",height:300}}><Spin/></div>;
   if (!family) return (
     <div>
-      <Typography.Title level={3}>家庭管理</Typography.Title>
       <Card style={{textAlign:"center",padding:40}}>
         <TeamOutlined style={{fontSize:48,color:"#ccc",marginBottom:16,display:"block"}}/>
         <Typography.Title level={4} style={{marginBottom:8}}>你还没有加入家庭</Typography.Title>

@@ -179,7 +179,6 @@ export default function Dashboard() {
 
   return (
     <div>
-      <Typography.Title level={3}>仪表盘</Typography.Title>
       <Space style={{ marginBottom: 16 }}>
         <DatePicker.RangePicker
           value={range}

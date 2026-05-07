@@ -119,10 +119,6 @@ export default function Settings() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <div>
-        <Typography.Title level={3} style={{ marginBottom: 4 }}>系统设置</Typography.Title>
-        <Typography.Text type="secondary">管理个人资料、默认偏好和账户安全。</Typography.Text>
-      </div>
       {partialMode && (
         <Alert
           type="warning"

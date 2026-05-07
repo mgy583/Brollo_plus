@@ -112,7 +112,6 @@ export default function Budgets() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>预算管理</Typography.Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={openModal}>新建预算</Button>
       </div>
       <Card>
