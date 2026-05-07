@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分类实体关系图</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #ffffff;
+      font-family: "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 20px;
+    }
+
+    svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .entity {
+      fill: #ffffff;
+      stroke: #000000;
+      stroke-width: 2;
+    }
+
+    .attribute {
+      fill: #ffffff;
+      stroke: #000000;
+      stroke-width: 1.5;
+    }
+
+    .line {
+      stroke: #000000;
+      stroke-width: 1.5;
+    }
+
+    .entity-text {
+      font-size: 18px;
+      font-weight: bold;
+      fill: #000000;
+    }
+
+    .attr-text {
+      font-size: 14px;
+      fill: #000000;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+<svg viewBox="0 0 1400 900">
+
+  <!-- 中心实体 -->
+  <rect x="560" y="380" width="280" height="80" class="entity" />
+  <text x="700" y="428" text-anchor="middle" class="entity-text">分类</text>
+
+  <!-- 主键 -->
+  <ellipse cx="700" cy="240" rx="130" ry="35" class="attribute" />
+  <text x="700" y="245" text-anchor="middle" class="attr-text">分类ID（主键）</text>
+  <line x1="700" y1="275" x2="700" y2="380" class="line" />
+
+  <!-- 左侧属性 -->
+  <ellipse cx="300" cy="180" rx="130" ry="32" class="attribute" />
+  <text x="300" y="185" text-anchor="middle" class="attr-text">所属用户ID</text>
+  <line x1="430" y1="200" x2="560" y2="395" class="line" />
+
+  <ellipse cx="250" cy="340" rx="130" ry="32" class="attribute" />
+  <text x="250" y="345" text-anchor="middle" class="attr-text">分类名称</text>
+  <line x1="380" y1="340" x2="560" y2="415" class="line" />
+
+  <ellipse cx="300" cy="560" rx="130" ry="32" class="attribute" />
+  <text x="300" y="565" text-anchor="middle" class="attr-text">分类类型</text>
+  <line x1="430" y1="545" x2="560" y2="445" class="line" />
+
+  <!-- 右侧属性 -->
+  <ellipse cx="1100" cy="220" rx="130" ry="32" class="attribute" />
+  <text x="1100" y="225" text-anchor="middle" class="attr-text">父分类ID</text>
+  <line x1="970" y1="235" x2="840" y2="400" class="line" />
+
+  <ellipse cx="1100" cy="500" rx="130" ry="32" class="attribute" />
+  <text x="1100" y="505" text-anchor="middle" class="attr-text">创建时间</text>
+  <line x1="970" y1="490" x2="840" y2="440" class="line" />
+
+</svg>
+
+</div>
+</body>
+</html>

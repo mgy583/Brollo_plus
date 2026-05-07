@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Button, Card, Col, Divider, Form, Input, Row, Select, Spin, Typography, message } from "antd";
+import { Alert, Button, Card, Col, Form, Input, Result, Row, Select, Space, Spin, Typography, message } from "antd";
+import { AxiosError } from "axios";
+import { useNavigate } from "react-router-dom";
 import { authApi, type User } from "../api/auth";
 import { useAuthStore } from "../store/authStore";
 
@@ -9,8 +11,11 @@ const LANGUAGES = [{ value: "zh-CN", label: "简体中文" }, { value: "en-US", 
 const THEMES = [{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }];
 
 export default function Settings() {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [partialMode, setPartialMode] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -21,91 +26,139 @@ export default function Settings() {
   const accessToken = useAuthStore(s => s.accessToken);
   const refreshToken = useAuthStore(s => s.refreshToken);
   const setSession = useAuthStore(s => s.setSession);
+  const clearSession = useAuthStore(s => s.clearSession);
 
   useEffect(() => {
+    if (storeUser) {
+      setUser(storeUser as User);
+      profileForm.setFieldsValue({ full_name: storeUser.full_name, phone: storeUser.phone });
+      settingsForm.setFieldsValue(storeUser.settings ?? {});
+    }
     authApi.getMe()
       .then(r => {
         setUser(r.data);
-        profileForm.setFieldsValue({ full_name: r.data.full_name });
+        profileForm.setFieldsValue({ full_name: r.data.full_name, phone: r.data.phone });
         settingsForm.setFieldsValue(r.data.settings ?? {});
+        setPartialMode(false);
+        setLoadError(false);
       })
-      .catch(() => message.error("加载用户信息失败"))
+      .catch((err) => {
+        const status = (err as AxiosError)?.response?.status;
+        if (status === 401) {
+          clearSession();
+          navigate("/auth/login", { replace: true });
+          return;
+        }
+        if (storeUser) {
+          setPartialMode(true);
+          return;
+        }
+        setLoadError(true);
+      })
       .finally(() => setLoading(false));
-  }, [profileForm, settingsForm]);
+  }, [profileForm, settingsForm, storeUser, clearSession, navigate]);
 
-  const onSaveProfile = async (values: { full_name: string }) => {
+  const syncSessionUser = (nextUser: User) => {
+    if (accessToken && refreshToken) {
+      setSession({ accessToken, refreshToken, user: { ...(storeUser ?? nextUser), ...nextUser } });
+    }
+  };
+
+  const onSaveProfile = async (values: { full_name?: string; phone?: string }) => {
     setSavingProfile(true);
     try {
-      const r = await authApi.updateMe({ full_name: values.full_name });
+      const r = await authApi.updateMe(values);
       setUser(r.data);
-      if (storeUser && accessToken && refreshToken) {
-        setSession({ accessToken, refreshToken, user: { ...storeUser, full_name: values.full_name } });
-      }
+      syncSessionUser(r.data);
       message.success("资料已更新");
-    } catch { /**/ } finally { setSavingProfile(false); }
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const onSaveSettings = async (values: Record<string, string>) => {
     setSavingSettings(true);
     try {
-      await authApi.updateSettings(values);
+      const r = await authApi.updateSettings(values);
+      setUser(r.data);
+      syncSessionUser(r.data);
+      settingsForm.setFieldsValue(r.data.settings ?? values);
       message.success("偏好设置已保存");
-    } catch { /**/ } finally { setSavingSettings(false); }
+    } finally {
+      setSavingSettings(false);
+    }
   };
 
   const onChangePassword = async (values: { old_password: string; new_password: string; confirm_password: string }) => {
     if (values.new_password !== values.confirm_password) {
-      message.error("两次输入的密码不一致");
+      message.error("两次输入的新密码不一致");
       return;
     }
     setSavingPassword(true);
     try {
       await authApi.changePassword({ old_password: values.old_password, new_password: values.new_password });
-      message.success("密码修改成功");
+      message.success("密码已修改，请重新登录");
       pwdForm.resetFields();
-    } catch { /**/ } finally { setSavingPassword(false); }
+      clearSession();
+      navigate("/auth/login", { replace: true });
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   if (loading) return <div style={{ textAlign: "center", padding: 60 }}><Spin size="large" /></div>;
 
+  if (loadError) return (
+    <Result
+      status="error"
+      title="加载失败"
+      subTitle="无法加载用户信息，请检查网络后重试"
+      extra={<Button type="primary" onClick={() => window.location.reload()}>重新加载</Button>}
+    />
+  );
+
   return (
-    <div>
-      <Typography.Title level={3}>系统设置</Typography.Title>
-      <Row gutter={24}>
-        <Col xs={24} md={12}>
-          <Card title="个人资料" style={{ marginBottom: 24 }}>
-            <div style={{ marginBottom: 12 }}>
-              <Typography.Text type="secondary">用户名：</Typography.Text>
-              <Typography.Text strong>{user?.username}</Typography.Text>
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <Typography.Text type="secondary">邮符1：</Typography.Text>
-              <Typography.Text>{user?.email}</Typography.Text>
-            </div>
-            <Form form={profileForm} layout="vertical" onFinish={onSaveProfile}>
-              <Form.Item name="full_name" label="姓名">
-                <Input placeholder="请输入姓名" />
-              </Form.Item>
-              <Button type="primary" htmlType="submit" loading={savingProfile}>保存资料</Button>
-            </Form>
-          </Card>
-          <Card title="修改密码">
-            <Form form={pwdForm} layout="vertical" onFinish={onChangePassword}>
-              <Form.Item name="old_password" label="当前密码" rules={[{ required: true }]}>
-                <Input.Password />
-              </Form.Item>
-              <Form.Item name="new_password" label="新密码" rules={[{ required: true, min: 6 }]}>
-                <Input.Password />
-              </Form.Item>
-              <Form.Item name="confirm_password" label="确认新密码" rules={[{ required: true }]}>
-                <Input.Password />
-              </Form.Item>
-              <Button type="primary" htmlType="submit" loading={savingPassword}>修改密码</Button>
-            </Form>
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <div>
+        <Typography.Title level={3} style={{ marginBottom: 4 }}>系统设置</Typography.Title>
+        <Typography.Text type="secondary">管理个人资料、默认偏好和账户安全。</Typography.Text>
+      </div>
+      {partialMode && (
+        <Alert
+          type="warning"
+          showIcon
+          message="当前为离线降级模式"
+          description="用户详情接口暂时不可用，页面已使用本地会话信息。你仍可尝试保存设置。"
+        />
+      )}
+
+      <Row gutter={[20, 20]}>
+        <Col xs={24} lg={12}>
+          <Card title="个人资料" bordered={false} style={{ borderRadius: 8 }}>
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              <div>
+                <Typography.Text type="secondary">用户名</Typography.Text>
+                <div style={{ fontWeight: 600 }}>{user?.username}</div>
+              </div>
+              <div>
+                <Typography.Text type="secondary">邮箱</Typography.Text>
+                <div style={{ fontWeight: 600 }}>{user?.email}</div>
+              </div>
+              <Form form={profileForm} layout="vertical" onFinish={onSaveProfile}>
+                <Form.Item name="full_name" label="姓名">
+                  <Input placeholder="请输入姓名" />
+                </Form.Item>
+                <Form.Item name="phone" label="手机号">
+                  <Input placeholder="请输入手机号" />
+                </Form.Item>
+                <Button type="primary" htmlType="submit" loading={savingProfile}>保存资料</Button>
+              </Form>
+            </Space>
           </Card>
         </Col>
-        <Col xs={24} md={12}>
-          <Card title="偏好设置">
+
+        <Col xs={24} lg={12}>
+          <Card title="偏好设置" bordered={false} style={{ borderRadius: 8 }}>
             <Form form={settingsForm} layout="vertical" onFinish={onSaveSettings}>
               <Form.Item name="default_currency" label="默认货币">
                 <Select options={CURRENCIES.map(c => ({ value: c, label: c }))} />
@@ -123,7 +176,24 @@ export default function Settings() {
             </Form>
           </Card>
         </Col>
+
+        <Col xs={24} lg={12}>
+          <Card title="修改密码" bordered={false} style={{ borderRadius: 8 }}>
+            <Form form={pwdForm} layout="vertical" onFinish={onChangePassword}>
+              <Form.Item name="old_password" label="当前密码" rules={[{ required: true, message: "请输入当前密码" }]}>
+                <Input.Password autoComplete="current-password" />
+              </Form.Item>
+              <Form.Item name="new_password" label="新密码" rules={[{ required: true, min: 8, message: "新密码至少 8 位" }]}>
+                <Input.Password autoComplete="new-password" />
+              </Form.Item>
+              <Form.Item name="confirm_password" label="确认新密码" rules={[{ required: true, message: "请再次输入新密码" }]}>
+                <Input.Password autoComplete="new-password" />
+              </Form.Item>
+              <Button type="primary" htmlType="submit" loading={savingPassword}>修改密码</Button>
+            </Form>
+          </Card>
+        </Col>
       </Row>
-    </div>
+    </Space>
   );
 }

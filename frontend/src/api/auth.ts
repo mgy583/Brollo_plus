@@ -3,9 +3,13 @@ import axios from "axios";
 
 export type User = {
   id: string;
+  uuid?: string;
   username: string;
   email: string;
   full_name?: string | null;
+  phone?: string | null;
+  role?: string;
+  status?: string;
   settings?: {
     default_currency?: string;
     timezone?: string;

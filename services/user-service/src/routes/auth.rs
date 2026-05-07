@@ -146,16 +146,18 @@ async fn register(
             if db.constraint().is_some() {
                 ("CONFLICT", "用户名或邮箱已存在", StatusCode::CONFLICT)
             } else {
+                tracing::error!("register db error: {e}");
                 (
                     "INTERNAL_ERROR",
-                    "数据库错误",
+                    "服务暂时不可用，请稍后再试",
                     StatusCode::INTERNAL_SERVER_ERROR,
                 )
             }
         } else {
+            tracing::error!("register db error: {e}");
             (
                 "INTERNAL_ERROR",
-                "数据库错误",
+                "服务暂时不可用，请稍后再试",
                 StatusCode::INTERNAL_SERVER_ERROR,
             )
         };
@@ -229,11 +231,12 @@ async fn login(
     .bind(&req.username)
     .fetch_optional(&state.db)
     .await
-    .map_err(|_| {
+    .map_err(|e| {
+        tracing::error!("login db query failed: {e}");
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             "INTERNAL_ERROR",
-            "数据库错误",
+            "服务暂时不可用，请稍后再试",
             None,
             request_id.clone(),
         )
@@ -357,11 +360,12 @@ async fn refresh(
     .bind(&refresh_hash)
     .fetch_optional(&state.db)
     .await
-    .map_err(|_| {
+    .map_err(|e| {
+        tracing::error!("refresh session query failed: {e}");
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             "INTERNAL_ERROR",
-            "数据库错误",
+            "服务暂时不可用，请稍后再试",
             None,
             request_id.clone(),
         )
@@ -422,11 +426,12 @@ async fn logout(
         .bind(&refresh_hash)
         .execute(&state.db)
         .await
-        .map_err(|_| {
+        .map_err(|e| {
+            tracing::error!("logout session delete failed: {e}");
             err(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
-                "数据库错误",
+                "服务暂时不可用，请稍后再试",
                 None,
                 request_id.clone(),
             )
@@ -516,6 +521,11 @@ async fn store_refresh_session(
         r#"
         INSERT INTO sessions (user_id, refresh_token_hash, device_info, expires_at)
         VALUES ($1, $2, $3, $4)
+        ON CONFLICT (refresh_token_hash)
+        DO UPDATE SET
+            user_id = EXCLUDED.user_id,
+            device_info = EXCLUDED.device_info,
+            expires_at = EXCLUDED.expires_at
         "#,
     )
     .bind(user_id)

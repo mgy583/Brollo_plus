@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Button, Card, Col, DatePicker, Row, Select, Space, Spin, Statistic, Table, Typography } from "antd";
+import { Button, Card, Col, DatePicker, Result, Row, Select, Space, Spin, Statistic, Table, Typography } from "antd";
 import dayjs from "dayjs";
 import type { ColumnsType } from "antd/es/table";
 import ReactECharts from "echarts-for-react";
@@ -18,6 +18,7 @@ type Overview = {
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -41,6 +42,7 @@ export default function Dashboard() {
 
   async function load() {
     setLoading(true);
+    setLoadError(false);
     try {
       const start_date = range[0].format("YYYY-MM-DD");
       const end_date = range[1].format("YYYY-MM-DD");
@@ -58,6 +60,9 @@ export default function Dashboard() {
       setTransactions(txRes.data.transactions);
       setCategoriesStat(catRes.data);
       setCategoryList(catListRes.data.categories);
+    } catch (err) {
+      const status = (err as any)?.response?.status;
+      if (status !== 401) setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -201,6 +206,13 @@ export default function Dashboard() {
         <div style={{ display: "grid", placeItems: "center", height: 260 }}>
           <Spin />
         </div>
+      ) : loadError ? (
+        <Result
+          status="error"
+          title="加载失败"
+          subTitle="无法加载数据，请检查网络后重试"
+          extra={<Button type="primary" onClick={load}>重新加载</Button>}
+        />
       ) : (
         <Space direction="vertical" style={{ width: "100%" }} size="large">
           <Row gutter={16}>

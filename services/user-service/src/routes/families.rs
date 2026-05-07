@@ -306,7 +306,10 @@ async fn my_family(State(s): State<AppState>, h: HeaderMap) -> Res {
     let row = sqlx::query_as::<_, FamilyRow>(
         "SELECT f.* FROM families f JOIN family_members fm ON fm.family_id=f.id WHERE fm.user_id=$1 LIMIT 1"
     ).bind(uid).fetch_optional(&s.db).await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "数据库错误", None, rid.clone()))?;
+    .map_err(|e| {
+        tracing::error!("my_family query failed: {e}");
+        err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "服务暂时不可用", None, rid.clone())
+    })?;
     let Some(fam) = row else {
         return Ok(axum::Json(
             serde_json::to_value(ok(serde_json::json!({"family": null}), "暂无家庭", rid)).unwrap(),
@@ -468,7 +471,7 @@ async fn join_family(
             err(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
-                "数据库错误",
+                "服务暂时不可用",
                 None,
                 rid.clone(),
             )
@@ -536,7 +539,10 @@ async fn list_members(State(s): State<AppState>, h: HeaderMap, Path(id): Path<i3
     let rows: Vec<MemberRow> = sqlx::query_as(
         "SELECT fm.id,fm.family_id,fm.user_id,fm.role,fm.nickname,fm.joined_at,u.username,u.email,u.full_name,u.uuid as user_uuid FROM family_members fm JOIN users u ON u.id=fm.user_id WHERE fm.family_id=$1 ORDER BY fm.joined_at"
     ).bind(id).fetch_all(&s.db).await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "数据库错误", None, rid.clone()))?;
+    .map_err(|e| {
+        tracing::error!("list_members query failed: {e}");
+        err(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "服务暂时不可用", None, rid.clone())
+    })?;
     let members: Vec<MemberDto> = rows.into_iter().map(to_mdto).collect();
     Ok(axum::Json(
         serde_json::to_value(ok(serde_json::json!({"members": members}), "ok", rid)).unwrap(),

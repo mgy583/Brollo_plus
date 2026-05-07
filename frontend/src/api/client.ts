@@ -31,24 +31,61 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+let isRedirectingToLogin = false;
+
+function onRefreshSuccess(newToken: string) {
+  refreshSubscribers.forEach((cb) => cb(newToken));
+  refreshSubscribers = [];
+}
+
+function subscribeTokenRefresh(cb: (token: string) => void) {
+  refreshSubscribers.push(cb);
+}
+
+function redirectToLogin() {
+  if (isRedirectingToLogin) return;
+  isRedirectingToLogin = true;
+  useAuthStore.getState().clearSession();
+  window.location.href = "/auth/login";
+}
+
 api.interceptors.response.use(
   (r) => r.data,
   async (error: AxiosError<ApiError>) => {
     const status = error.response?.status;
+    const originalConfig = error.config;
 
-    if (status === 401) {
-      const refreshed = await tryRefresh();
-      if (refreshed && error.config) {
-        return api.request(error.config);
+    if (status === 401 && originalConfig) {
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          subscribeTokenRefresh((newToken: string) => {
+            originalConfig.headers.Authorization = `Bearer ${newToken}`;
+            resolve(api.request(originalConfig));
+          });
+        });
       }
-      useAuthStore.getState().clearSession();
-      window.location.href = "/auth/login";
+
+      isRefreshing = true;
+      const refreshed = await tryRefresh();
+      isRefreshing = false;
+
+      if (refreshed) {
+        const newToken = useAuthStore.getState().accessToken!;
+        onRefreshSuccess(newToken);
+        originalConfig.headers.Authorization = `Bearer ${newToken}`;
+        return api.request(originalConfig);
+      }
+
+      refreshSubscribers = [];
+      redirectToLogin();
       return Promise.reject(error);
     }
 
     const msg = error.response?.data?.error?.message;
     if (msg) message.error(msg);
-    else message.error("网络错误，请稍后再试");
+    else if (status !== 401) message.error("网络错误，请稍后再试");
     return Promise.reject(error);
   }
 );

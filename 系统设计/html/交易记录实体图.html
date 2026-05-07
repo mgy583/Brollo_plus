@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>交易记录实体关系图</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #ffffff;
+      font-family: "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    .container {
+      max-width: 1500px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 20px;
+    }
+
+    svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .entity {
+      fill: #ffffff;
+      stroke: #000000;
+      stroke-width: 2;
+    }
+
+    .attribute {
+      fill: #ffffff;
+      stroke: #000000;
+      stroke-width: 1.5;
+    }
+
+    .line {
+      stroke: #000000;
+      stroke-width: 1.5;
+    }
+
+    .entity-text {
+      font-size: 18px;
+      font-weight: bold;
+      fill: #000000;
+    }
+
+    .attr-text {
+      font-size: 14px;
+      fill: #000000;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+<svg viewBox="0 0 1500 950">
+
+  <!-- 中心实体 -->
+  <rect x="610" y="400" width="280" height="80" class="entity" />
+  <text x="750" y="448" text-anchor="middle" class="entity-text">交易记录</text>
+
+  <!-- 主键 -->
+  <ellipse cx="750" cy="230" rx="140" ry="35" class="attribute" />
+  <text x="750" y="235" text-anchor="middle" class="attr-text">交易ID（主键）</text>
+  <line x1="750" y1="265" x2="750" y2="400" class="line" />
+
+  <!-- 左侧属性 -->
+  <ellipse cx="280" cy="170" rx="130" ry="32" class="attribute" />
+  <text x="280" y="175" text-anchor="middle" class="attr-text">用户ID</text>
+  <line x1="410" y1="190" x2="610" y2="410" class="line" />
+
+  <ellipse cx="240" cy="300" rx="130" ry="32" class="attribute" />
+  <text x="240" y="305" text-anchor="middle" class="attr-text">账户ID</text>
+  <line x1="370" y1="300" x2="610" y2="425" class="line" />
+
+  <ellipse cx="240" cy="440" rx="130" ry="32" class="attribute" />
+  <text x="240" y="445" text-anchor="middle" class="attr-text">分类ID</text>
+  <line x1="370" y1="440" x2="610" y2="440" class="line" />
+
+  <ellipse cx="280" cy="590" rx="130" ry="32" class="attribute" />
+  <text x="280" y="595" text-anchor="middle" class="attr-text">交易类型</text>
+  <line x1="410" y1="575" x2="610" y2="455" class="line" />
+
+  <!-- 右侧属性 -->
+  <ellipse cx="1220" cy="170" rx="130" ry="32" class="attribute" />
+  <text x="1220" y="175" text-anchor="middle" class="attr-text">交易金额</text>
+  <line x1="1090" y1="190" x2="890" y2="410" class="line" />
+
+  <ellipse cx="1260" cy="300" rx="130" ry="32" class="attribute" />
+  <text x="1260" y="305" text-anchor="middle" class="attr-text">交易时间</text>
+  <line x1="1130" y1="300" x2="890" y2="425" class="line" />
+
+  <ellipse cx="1260" cy="440" rx="130" ry="32" class="attribute" />
+  <text x="1260" y="445" text-anchor="middle" class="attr-text">交易描述</text>
+  <line x1="1130" y1="440" x2="890" y2="440" class="line" />
+
+  <ellipse cx="1220" cy="590" rx="130" ry="32" class="attribute" />
+  <text x="1220" y="595" text-anchor="middle" class="attr-text">交易状态</text>
+  <line x1="1090" y1="575" x2="890" y2="455" class="line" />
+
+</svg>
+
+</div>
+</body>
+</html>
